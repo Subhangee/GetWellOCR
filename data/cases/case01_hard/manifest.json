@@ -1,0 +1,148 @@
+{
+  "case_id": "case01_hard",
+  "variant_of": "case01",
+  "fictional": true,
+  "handwriting_font": "Inkfree.ttf",
+  "pages": [
+    {
+      "page": 1,
+      "layout": "as case01",
+      "handwriting": [
+        {
+          "kind": "underline + '!!'",
+          "where": "diagnosis 1",
+          "changes_truth": false
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 3,
+      "layout": "as case01",
+      "handwriting": [
+        {
+          "kind": "strike-through row + note",
+          "where": "Glimepirid row",
+          "text": "abgesetzt 20.11.",
+          "changes_truth": false,
+          "note": "confirms the fax (p19)"
+        }
+      ]
+    },
+    {
+      "page": 4,
+      "layout": "landscape A4, photographed rotated 90°",
+      "handwriting": [
+        {
+          "kind": "note across the top",
+          "text": "ALT! siehe Entlassbrief",
+          "changes_truth": false
+        }
+      ]
+    },
+    {
+      "page": 5,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 6,
+      "layout": "cumulative lab table, dates as rows (transposed)",
+      "handwriting": []
+    },
+    {
+      "page": 7,
+      "layout": "as case01",
+      "handwriting": [
+        {
+          "kind": "side note",
+          "text": "Ramipril pausiert seit 20.11. (Schwindel)",
+          "changes_truth": true,
+          "note": "new fact N14, new conflict C6"
+        }
+      ]
+    },
+    {
+      "page": 8,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 9,
+      "layout": "table without grid lines",
+      "handwriting": []
+    },
+    {
+      "page": 10,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 11,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 12,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 13,
+      "layout": "as case01",
+      "handwriting": [
+        {
+          "kind": "signature scribble",
+          "changes_truth": false
+        }
+      ]
+    },
+    {
+      "page": 14,
+      "layout": "as case01",
+      "handwriting": [
+        {
+          "kind": "strike-through + correction",
+          "where": "Allergien",
+          "text": "keine bekannt -> Penicillin!",
+          "changes_truth": true,
+          "note": "conflict C5 changes"
+        }
+      ]
+    },
+    {
+      "page": 15,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 16,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 17,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 18,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 19,
+      "layout": "as case01",
+      "handwriting": []
+    },
+    {
+      "page": 20,
+      "layout": "blurry re-photo of page 4 (duplicate)",
+      "handwriting": []
+    }
+  ]
+}

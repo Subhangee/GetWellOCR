@@ -8,7 +8,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-ALL_STEPS = ("gray", "denoise", "contrast", "upscale", "deskew")
+ALL_STEPS = ("gray", "orient", "flatten", "denoise", "contrast", "upscale", "deskew")
 
 
 def load_image(path: str | Path, page: int = 0, dpi: int = 300) -> np.ndarray:
@@ -80,6 +80,56 @@ def estimate_noise(gray: np.ndarray) -> float:
     return float(np.abs(response).sum() * np.sqrt(0.5 * np.pi) / (6 * (w - 2) * (h - 2)))
 
 
+def _text_score(gray: np.ndarray) -> float:
+    """Quick read on a small copy: sum of confidences of real words (higher = upright)."""
+    import pytesseract
+    small = cv2.resize(gray, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+    d = pytesseract.image_to_data(small, config="--psm 3", output_type=pytesseract.Output.DICT)
+    return sum(float(c) for t, c in zip(d["text"], d["conf"]) if len(t.strip()) >= 3 and float(c) > 50)
+
+
+def fix_orientation(gray: np.ndarray) -> tuple[np.ndarray, int]:
+    """Turn sideways or upside-down pages upright (phone held upright for a landscape page).
+
+    Deskew only handles small angles; this handles 90 / 180 / 270 degrees.
+    1. Tesseract's orientation detection (OSD) suggests a rotation (fast, full resolution).
+    2. Confident (>= 2): turn. Unsure: a quick read of both versions decides.
+    Returns the image and the rotation applied (0 if none).
+    """
+    try:
+        import re
+        import pytesseract
+        from . import config
+        if config.TESSERACT_CMD and Path(config.TESSERACT_CMD).exists():
+            pytesseract.pytesseract.tesseract_cmd = config.TESSERACT_CMD
+        osd = pytesseract.image_to_osd(gray, config="--psm 0 -c min_characters_to_try=30")
+        rotate = int(re.search(r"Rotate: (\d+)", osd).group(1))
+        conf = float(re.search(r"Orientation confidence: ([\d.]+)", osd).group(1))
+        if rotate == 0:
+            return gray, 0
+        turn = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}[rotate]
+        turned = cv2.rotate(gray, turn)
+        if conf >= 2.0 or _text_score(turned) > 1.1 * _text_score(gray):
+            return turned, rotate
+    except Exception:            # no OSD data, too little text, Tesseract missing: leave as is
+        pass
+    return gray, 0
+
+
+def flatten_illumination(gray: np.ndarray) -> np.ndarray:
+    """Flat-field correction: divide by the smooth background (shadows, lamp gradients).
+
+    Same idea as bias-field correction in MRI. Phone photos are brighter in one
+    corner than another; Tesseract then loses whole table blocks. Dividing by a
+    heavily smoothed copy of the page makes the paper evenly white.
+    """
+    small = cv2.resize(gray, (0, 0), fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+    background = cv2.resize(cv2.medianBlur(small, 31), (gray.shape[1], gray.shape[0]),
+                            interpolation=cv2.INTER_LINEAR)
+    flat = gray.astype(np.float32) / np.maximum(background.astype(np.float32), 1.0) * 235.0
+    return np.clip(flat, 0, 255).astype(np.uint8)
+
+
 def upscale(gray: np.ndarray, factor: float = 2.0) -> np.ndarray:
     """Bigger letters help OCR on low-resolution images (fax, small photos)."""
     return cv2.resize(gray, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
@@ -103,6 +153,13 @@ def preprocess(img: np.ndarray, steps=ALL_STEPS) -> tuple[np.ndarray, list[str]]
     log.append("gray")
     sigma = estimate_noise(out)
     log.append(f"noise sigma {sigma:.1f}")
+    if "flatten" in steps:
+        out = flatten_illumination(out)
+        log.append("flatten lighting")
+    if "orient" in steps:
+        out, turned = fix_orientation(out)
+        if turned:
+            log.append(f"turned upright ({turned} deg)")
     if "denoise" in steps:
         if sigma >= NOISE_SKIP:
             strength = max(10.0, 0.9 * sigma)
@@ -111,7 +168,9 @@ def preprocess(img: np.ndarray, steps=ALL_STEPS) -> tuple[np.ndarray, list[str]]
         else:
             log.append("denoise skipped (clean)")
     if "contrast" in steps:
-        if sigma < NOISE_NO_CONTRAST:
+        if "flatten" in steps:
+            log.append("contrast skipped (already flattened)")
+        elif sigma < NOISE_NO_CONTRAST:
             out = enhance_contrast(out)
             log.append("contrast")
         else:

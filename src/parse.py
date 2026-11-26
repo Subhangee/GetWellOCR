@@ -70,6 +70,8 @@ def _diagnosis_from_line(line: OCRLine) -> Diagnosis | None:
     if not m:
         return None
     text = (fixed[:m.start()] + fixed[m.end():]).strip(" -:;,()|")
+    # drop labels and numbering OCR keeps in front: "Diagnose:", "1.", "Diagnosen:"
+    text = re.sub(r"^(\d+\.\s*)?((Haupt|Neben)?[Dd]iagnosen?\s*(/[^:]*)?:\s*)?", "", text).strip(" -:;,()|")
     return Diagnosis(text=text or fixed, icd10=m.group(1), source_text=line.text,
                      bbox=line.bbox, confidence=line.confidence)
 

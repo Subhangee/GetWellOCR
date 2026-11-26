@@ -19,7 +19,7 @@ from src.review import (DX_FIELDS, MED_FIELDS, corrections, dx_rows, finalize_dx
                         finalize_meds, med_rows, unchecked_flags)
 
 st.set_page_config(page_title="paper2pc", page_icon="📄", layout="wide")
-st.title("paper2pc")
+st.title("Get Well OCR")
 st.caption("From paper to PC: medications and diagnoses in seconds. Demo with fictional data only.")
 
 # ---------- sidebar ----------

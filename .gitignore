@@ -23,3 +23,6 @@ desktop.ini
 # Generated test images and results (re-create with the scripts)
 data/degraded/*.png
 outputs/*.csv.vs/
+data/cases/*/stress/
+outputs/stress/
+outputs/cases/

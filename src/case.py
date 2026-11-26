@@ -1,0 +1,465 @@
+"""Multi-page case pipeline: many photos of one patient -> one ER overview.
+
+  1. read_page      cleanup + OCR + quality check (blurry -> "retake"), cached
+  2. classify       document type per page (rules on German keywords)
+  3. group          pages -> documents ("Seite 2 von 3" continues the previous one)
+  4. extract        medications, diagnoses, labs, CAVE facts, contacts per page
+  5. merge          current medication, conflicts, latest labs, timeline
+  6. summarize      ER overview in the app's JSON shape, every fact with its source page
+
+v1 = rules only, fully offline (Tesseract). The LLM step tomorrow plugs in at
+steps 2, 4 and 6 and is compared against this baseline.
+"""
+import json
+import re
+from datetime import datetime
+from pathlib import Path
+
+import cv2
+from rapidfuzz import fuzz
+
+from .drugs import DRUGS
+from .extract import read_text
+from .parse import DOSING, ICD10, ICD10_OCR_FIX, STRENGTH, merge_rows
+from .preprocess import load_image, preprocess, to_gray
+
+SHARPNESS_MIN = 150          # below: ask for a new photo (blurry page ~ 30, sharp pages ~ 700+)
+CONFIDENCE_MIN = 0.60        # mean OCR confidence below this: text unreadable (fax, heavy noise) -> retake
+                             # normal pages ~0.9; without this check unreadable pages fail SILENTLY
+
+# ------------------------------------------------------------------ 1. read
+
+def sharpness(gray) -> float:
+    small = cv2.resize(gray, (0, 0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+    return float(cv2.Laplacian(small, cv2.CV_64F).var())
+
+
+def read_page(path: Path, page: int, engine: str, cache_dir: Path, fresh=False) -> dict:
+    cache = cache_dir / f"{path.stem}_{engine}.json"
+    if cache.exists() and not fresh:
+        return json.loads(cache.read_text(encoding="utf-8"))
+    img = load_image(path)
+    sharp = sharpness(to_gray(img))
+    clean, steps = preprocess(img)
+    lines = merge_rows(read_text(clean, engine))
+    confs = [l.confidence for l in lines if l.confidence is not None]
+    result = {
+        "page": page, "file": path.name, "sharpness": round(sharp),
+        "mean_confidence": round(sum(confs) / len(confs), 2) if confs else None,
+        "steps": steps,
+        "lines": [{"text": l.text, "conf": l.confidence,
+                   "bbox": l.bbox.model_dump() if l.bbox else None} for l in lines],
+    }
+    cache.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    return result
+
+
+def page_quality(p: dict) -> str:
+    """Two gates: sharp enough to read, and the reader is confident about what it read."""
+    if p["sharpness"] < SHARPNESS_MIN:
+        return "too_blurry"
+    if p["mean_confidence"] is None or p["mean_confidence"] < CONFIDENCE_MIN:
+        return "unreadable"
+    return "ok"
+
+
+def page_text(p: dict) -> str:
+    return "\n".join(l["text"] for l in p["lines"])
+
+# ------------------------------------------------------------------ 2. classify
+
+TYPE_RULES = {   # type: [(keyword, weight)]  — keywords in lower case
+    "medication_plan":   [("medikationsplan", 5), ("handelsname", 2), ("einheit", 1)],
+    "lab_report":        [("laborbefund", 5), ("referenzbereich", 3), ("probeneingang", 2)],
+    "referral":          [("einweisung", 5), ("verordnung von krankenhausbehandlung", 5), ("fragestellung", 1)],
+    "imaging_report":    [("befundbericht", 4), ("echokardiographie", 5), ("ct thorax", 4), ("röntgen", 3), ("lvef", 1)],
+    "surgery_report":    [("operationsbericht", 5), ("op-datum", 3), ("operateur", 2), ("implantate", 1)],
+    "advance_directive": [("patientenverfügung und", 6), ("vorsorgevollmacht (auszug)", 6), ("bevollmächtige", 2),
+                          ("wiederbelebung", 1)],
+    "nursing_transfer":  [("pflegeüberleitung", 6), ("pflegegrad", 3), ("bezugsperson", 2)],
+    "fax_note":          [("telefax", 5), ("kurzmitteilung", 4)],
+    "irrelevant":        [("krankenkasse", 3), ("gesundheitskarte", 4), ("bonusprogramm", 4), ("zuzahlung", 2)],
+    "discharge_letter":  [("entlassungsbrief", 6), ("arztbrief", 5), ("aufenthalt", 2), ("medikation bei entlassung", 3),
+                          ("verlauf", 1)],
+    "specialist_letter": [("diabetolog", 4), ("bericht", 1), ("therapieempfehlung", 2)],
+    "other_medical":     [("verlaufsbogen", 5), ("dmp", 2)],
+}
+TYPE_TITLES = {"discharge_letter": "Arztbrief / Entlassungsbrief", "medication_plan": "Medikationsplan",
+               "lab_report": "Laborbefund", "referral": "Einweisung", "imaging_report": "Bildgebung / Funktionsbefund",
+               "surgery_report": "OP-Bericht", "advance_directive": "Patientenverfügung / Vollmacht",
+               "nursing_transfer": "Pflegeüberleitung", "fax_note": "Fax / Kurzmitteilung",
+               "irrelevant": "Nicht medizinisch", "specialist_letter": "Facharztbericht",
+               "other_medical": "Sonstiges medizinisches Dokument", "unknown": "Unklar"}
+CONTINUATION = re.compile(r"Seite\s*([2-9])\s*von\s*(\d)", re.IGNORECASE)
+
+
+def classify(text: str) -> tuple[str, float]:
+    lines = text.lower().splitlines()
+    head, body = "\n".join(lines[:10]), "\n".join(lines)
+    scores = {}
+    for doc_type, rules in TYPE_RULES.items():
+        scores[doc_type] = sum(w * (3 if k in head else 1) for k, w in rules if k in body)
+    best = max(scores, key=scores.get)
+    total = sum(scores.values())
+    return (best, round(scores[best] / total, 2)) if scores[best] > 0 else ("unknown", 0.0)
+
+# ------------------------------------------------------------------ 3. group + dates
+
+DATE = re.compile(r"(?<!\d)(\d{2})\.(\d{2})\.(\d{4})(?!\d)")
+
+
+def find_date(text: str) -> str | None:
+    """First date on the page that is not a birth date ("geb. 14.03.1948")."""
+    for m in DATE.finditer(text):
+        before = text[max(0, m.start() - 12):m.start()].lower()
+        if "geb" in before:
+            continue
+        try:
+            d = datetime(int(m[3]), int(m[2]), int(m[1]))
+        except ValueError:
+            continue
+        if 1990 <= d.year and d <= datetime.now():   # OCR misreads like 2926 or future dates are skipped
+            return d.strftime("%Y-%m-%d")
+    return None
+
+
+def group_documents(pages: list[dict]) -> list[dict]:
+    docs = []
+    for p in pages:
+        if p["quality"] != "ok":
+            continue
+        text = page_text(p)
+        cont = CONTINUATION.search(text)
+        if cont and docs and docs[-1]["pages"][-1] == p["page"] - 1:
+            docs[-1]["pages"].append(p["page"])
+            p["doc_type"], p["doc_id"] = docs[-1]["type"], docs[-1]["doc_id"]
+            continue
+        doc_type, conf = classify(text)
+        doc = {"doc_id": f"D{len(docs) + 1:02d}", "type": doc_type, "title": TYPE_TITLES.get(doc_type, doc_type),
+               "type_confidence": conf, "date": find_date(text), "pages": [p["page"]]}
+        docs.append(doc)
+        p["doc_type"], p["doc_id"] = doc_type, doc["doc_id"]
+    return docs
+
+# ------------------------------------------------------------------ 4. extract
+
+DRUG_LOWER = {d.lower(): d for d in DRUGS}
+DRUG_LOWER.update({"phenprocoumon": "Phenprocoumon", "marcumar": "Phenprocoumon"})
+ANTICOAGULANTS = {"Apixaban", "Rivaroxaban", "Edoxaban", "Dabigatran", "Phenprocoumon"}
+STATUS_WORDS = {"stopped": ["abgesetzt", "beendet", "gestoppt", "abgeseizt"], "paused": ["pausiert"],
+                "new": ["angesetzt", "begonnen", "neu"]}
+SWITCH = re.compile(r"(?:Umstellung|umgestellt)\s+von\s+(\w+)\s+auf\s+(\w+)", re.IGNORECASE)
+UNITS = {"mmol/l", "mg/dl", "ml/min", "ml/min/1,73m2", "pg/ml", "g/dl", "%", "/nl", "mg/l", "µmol/l", "ng/ml", "mu/l"}
+LVEF = re.compile(r"LVEF[^\d%]{0,30}?(\d{2})\s*%")
+LAB_NAMES = ["Natrium", "Kalium", "Kreatinin", "eGFR", "Harnstoff", "Hämoglobin", "Leukozyten", "CRP",
+             "NT-proBNP", "HbA1c", "INR", "TSH"]
+LAB_LINE = re.compile(r"^\W*(" + "|".join(re.escape(n) for n in LAB_NAMES) + r")\b\D*?(\d+(?:[.,]\d+)?)\s*(\S+)?(.*)$")
+WORD = re.compile(r"[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-]+")
+
+
+def find_drugs(line: str) -> list[tuple[str, int]]:
+    """Known drug names in a line (OCR-tolerant), with their character position."""
+    found = []
+    for m in WORD.finditer(line):
+        tok = m.group(0).lower().strip("-")
+        if len(tok) < 3:
+            continue
+        if tok in DRUG_LOWER:
+            found.append((DRUG_LOWER[tok], m.start()))
+            continue
+        if len(tok) >= 6:
+            best = max(DRUG_LOWER, key=lambda d: fuzz.ratio(tok, d))
+            if fuzz.ratio(tok, best) >= 85:
+                found.append((DRUG_LOWER[best], m.start()))
+    return found
+
+
+def line_status(line: str) -> str | None:
+    """Status word in this piece of text. Picks the closest match, so 'angesetzt' (new)
+    is not confused with 'abgesetzt' (stopped). Tolerates OCR typos like 'abgeseizt'."""
+    best, best_score = None, 0
+    for t in (t.lower() for t in WORD.findall(line)):
+        for status, words in STATUS_WORDS.items():
+            for w in words:
+                score = 100 if t == w else (fuzz.ratio(t, w) if len(w) > 4 else 0)
+                if score > best_score:
+                    best, best_score = status, score
+    return best if best_score >= 85 else None
+
+
+def fix_icd(text: str) -> str:
+    return ICD10_OCR_FIX.sub(lambda m: f"(I{m.group(2)})", text)
+
+
+def extract_page(p: dict) -> dict:
+    facts = {"meds": [], "diagnoses": [], "labs": [], "cave": [], "contacts": [], "negatives": [], "findings": []}
+    doc_type, page = p.get("doc_type"), p["page"]
+    previous = ""
+    for l in p["lines"]:
+        text, conf = l["text"], l["conf"]
+        low = text.lower()
+        src = {"page": page, "doc_id": p.get("doc_id"), "source_text": text}
+
+        # medications (table rows and prose)
+        drugs = find_drugs(text)
+        switched = {m.group(1).lower() for m in SWITCH.finditer(text)}
+        for i, (drug, pos) in enumerate(drugs):
+            end = drugs[i + 1][1] if i + 1 < len(drugs) else len(text)
+            segment = text[pos:end]
+            near = segment[:35]                      # strength must sit right after the name
+            s, d = STRENGTH.search(near), DOSING.search(near)
+            if s and s.group(2).lower() == "ml":     # "eGFR unter 30 ml/min" is not a dose
+                s = None
+            status = "stopped" if drug.lower() in switched else line_status(segment)
+            facts["meds"].append({"name": drug, "strength": f"{s.group(1)} {s.group(2)}" if s else None,
+                                  "dosing": re.sub(r"\s+", "", d.group(0)) if d else None,
+                                  "status": status, "confidence": conf, **src})
+
+        # diagnoses: every ICD code on the line, with the words in front of it
+        fixed, prev = fix_icd(text), 0
+        for m in ICD10.finditer(fixed):
+            label = fixed[prev:m.start()].strip(" -·:;,()|")
+            if len(label) < 4 and prev == 0:         # code wrapped onto its own line
+                label = previous.strip(" -·:;,()|")
+            label = re.sub(r"^(\d+\.\s*)?((Haupt|Neben)?[Dd]iagnosen?[^:]*:\s*)?", "", label)
+            label = re.sub(r"\(\s*[1l|]\d{2}(\.\d{1,2})?\s*\)", "", label).strip(" -·:;,()|")
+            prev = m.end()
+            if len(label) >= 4 and doc_type != "lab_report":
+                facts["diagnoses"].append({"text": label, "icd10": m.group(1), **src})
+        previous = text
+        lv = LVEF.search(text)
+        if lv:
+            facts["findings"].append({"fact": f"LVEF {lv.group(1)} %", **src})
+
+        # labs (lab report tables only)
+        if doc_type == "lab_report":
+            m = LAB_LINE.match(text)
+            if m:
+                flag = re.search(r"\b([HL])\s*$", text)
+                unit = (m.group(3) or "").strip("|")
+                facts["labs"].append({"name": m.group(1), "value": m.group(2),
+                                      "unit": unit if unit.lower() in UNITS else "",
+                                      "flag": flag.group(1) if flag else "", **src})
+
+        # CAVE facts
+        if "allergi" in low:
+            if "keine" in low:
+                facts["negatives"].append({"category": "allergy", "fact": "Allergien: keine bekannt", **src})
+            else:
+                sub = re.search(r"([A-Za-zÄÖÜäöü]+)[-\s]?Allergi", text)
+                if sub and len(sub.group(1)) >= 5 and sub.group(1)[0].isupper():
+                    facts["cave"].append({"category": "allergy", "fact": f"Allergie: {sub.group(1)}", **src})
+        if "schrittmacher" in low:
+            facts["cave"].append({"category": "implant", "fact": "Herzschrittmacher in situ", **src})
+        if re.search(r"\btep\b|endoprothese", low):
+            facts["cave"].append({"category": "implant", "fact": "Gelenkendoprothese (TEP)", **src})
+        if doc_type == "advance_directive" and re.match(r"^\W*[\[(]?\s*[xX]", text):
+            if "reanimation" in low or "wiederbelebung" in low:
+                facts["cave"].append({"category": "directive", "fact": "Patientenverfügung: keine Reanimation", **src})
+            if "intubation" in low or "beatmung" in low and "nicht-invasiv" not in low:
+                facts["cave"].append({"category": "directive", "fact": "Patientenverfügung: keine Intubation/invasive Beatmung", **src})
+        if re.search(r"tochter|sohn|ehemann|ehefrau|betreuer|bevollmächtig", low) and \
+                doc_type in ("advance_directive", "nursing_transfer"):
+            phone = re.search(r"Tel\.?\s*([\d\s/-]{6,})", text)
+            who = re.search(r"(Tochter|Sohn|Ehemann|Ehefrau|Betreuer\w*)\s+([A-ZÄÖÜ][\w]+\s+[A-ZÄÖÜ][\w]+)?", text)
+            label = " ".join(x for x in [who.group(1) if who else "Bezugsperson",
+                                          who.group(2) if who and who.group(2) else "",
+                                          f"Tel. {phone.group(1).strip()}" if phone else ""] if x)
+            facts["contacts"].append({"fact": label, **src})
+    return facts
+
+# ------------------------------------------------------------------ 5. merge
+
+def _norm(s):
+    return (s or "").replace(" ", "").replace(",", ".").lower()
+
+
+def merge(pages: list[dict], docs: list[dict]) -> dict:
+    doc_by_id = {d["doc_id"]: d for d in docs}
+    relevant = [d for d in docs if d["type"] != "irrelevant"]
+    dates = sorted(d["date"] for d in relevant if d["date"])
+    newest = dates[-1] if dates else None
+    cutoff = f"{int(newest[:4]) - 1}{newest[4:]}" if newest else None   # facts older than 1 year = history
+    all_facts = {k: [] for k in ("meds", "diagnoses", "labs", "cave", "contacts", "negatives", "findings")}
+    for p in pages:
+        if p.get("doc_id") and doc_by_id[p["doc_id"]]["type"] == "irrelevant":
+            continue
+        for k, v in p.get("facts", {}).items():
+            for f in v:
+                f["date"] = doc_by_id[f["doc_id"]]["date"] if f.get("doc_id") else None
+            all_facts[k].extend(v)
+
+    # --- medication: newest concrete mention wins, explicit "stopped" anywhere newer wins
+    meds = {}
+    for m in all_facts["meds"]:
+        meds.setdefault(m["name"], []).append(m)
+    current, conflicts, history = [], [], []
+    for name, mentions in meds.items():
+        recent = [m for m in mentions if not cutoff or (m["date"] or newest) >= cutoff]
+        if not recent:
+            history.append({"name": name, "sources": sorted({m["page"] for m in mentions})})
+            continue
+        concrete = sorted([m for m in recent if m["strength"] or m["dosing"]],
+                          key=lambda m: (m["date"] or "", bool(m["strength"]) + bool(m["dosing"])))
+        # an undated note (fax, handwritten) is treated as the newest information: safer to ask than to miss a stop
+        stops = sorted([m for m in recent if m["status"] in ("stopped", "paused")], key=lambda m: m["date"] or "9999")
+        news = [m for m in recent if m["status"] == "new"]
+        latest = concrete[-1] if concrete else recent[-1]
+        status = "active"
+        if stops and (stops[-1]["date"] or "9999") >= (latest["date"] or ""):
+            status = stops[-1]["status"]
+        elif news:
+            status = "new"
+        sources = sorted({m["page"] for m in recent})
+        current.append({"name": name, "strength": latest["strength"], "dosing": latest["dosing"],
+                        "status": status, "sources": sources})
+        variants = {(_norm(m["strength"]), _norm(m["dosing"])) for m in concrete if m["strength"]}
+        if len({v[0] for v in variants}) > 1:
+            detail = " vs. ".join(f"{m['strength'] or '?'} {m['dosing'] or ''} (S. {m['page']}, {m['date'] or 'ohne Datum'})"
+                                  for m in concrete if m["strength"])
+            conflicts.append({"text": f"{name}: unterschiedliche Angaben – {detail}",
+                              "sources": sorted({m['page'] for m in concrete})})
+        if stops and concrete and (concrete[-1]["date"] or "") <= (stops[-1]["date"] or "9999") and \
+                any(m["page"] != stops[-1]["page"] for m in concrete):
+            conflicts.append({"text": f"{name}: noch in einer Medikationsliste, aber laut S. {stops[-1]['page']} "
+                                      f"{'abgesetzt' if stops[-1]['status'] == 'stopped' else 'pausiert'}",
+                              "sources": sorted({stops[-1]['page'], concrete[-1]['page']})})
+    anticoag_seen = {m["name"] for m in current if m["name"] in ANTICOAGULANTS}
+    if len(anticoag_seen) > 1:
+        conflicts.append({"text": "Mehrere Antikoagulanzien dokumentiert: " + ", ".join(sorted(anticoag_seen)) +
+                                  ". Aktuelles Präparat klären, Doppel-Antikoagulation ausschließen.",
+                          "sources": sorted({s for m in current if m["name"] in anticoag_seen for s in m["sources"]})})
+
+    # --- labs: latest value per parameter, with trend
+    labs = {}
+    for l in sorted(all_facts["labs"], key=lambda l: l["date"] or ""):
+        labs.setdefault(l["name"], []).append(l)
+    lab_out = []
+    for name, vals in labs.items():
+        last = vals[-1]
+        trend = " → ".join(v["value"] for v in vals) if len(vals) > 1 else ""
+        lab_out.append({"name": name, "value": last["value"], "unit": last["unit"], "flag": last["flag"],
+                        "trend": trend, "sources": sorted({v["page"] for v in vals})})
+
+    # --- safety checks (simple rules, for the doctor to verify)
+    lab_val = {l["name"]: float(l["value"].replace(",", ".")) for l in lab_out}
+    active = {m["name"] for m in current if m["status"] in ("active", "new")}
+    warnings = []
+    if "Metformin" in active and lab_val.get("eGFR", 99) < 30:
+        warnings.append({"text": f"Metformin bei eGFR {lab_val['eGFR']:.0f} (< 30): Kontraindikation prüfen",
+                         "sources": sorted({*next(m for m in current if m['name'] == 'Metformin')['sources'],
+                                            *next(l for l in lab_out if l['name'] == 'eGFR')['sources']})})
+    if lab_val.get("Kalium", 0) > 5.0 and active & {"Ramipril", "Lisinopril", "Enalapril", "Candesartan", "Valsartan", "Spironolacton"}:
+        warnings.append({"text": f"Kalium {lab_val['Kalium']:.1f} mmol/l unter RAAS-Hemmer",
+                         "sources": next(l for l in lab_out if l['name'] == 'Kalium')['sources']})
+
+    # --- CAVE: de-duplicate, keep all source pages
+    cave = {}
+    for c in all_facts["cave"]:
+        cave.setdefault(c["fact"], set()).add(c["page"])
+    cave_out = [{"text": k, "sources": sorted(v)} for k, v in cave.items()]
+    for m in current:
+        if m["name"] in ANTICOAGULANTS and m["status"] in ("active", "new"):
+            cave_out.insert(0, {"text": f"Antikoagulation: {m['name']} {m['strength'] or ''} {m['dosing'] or ''}".strip(),
+                                "sources": m["sources"]})
+    allergy_yes = [c for c in all_facts["cave"] if c["category"] == "allergy"]
+    allergy_no = [n for n in all_facts["negatives"] if n["category"] == "allergy"]
+    if allergy_yes and allergy_no:
+        conflicts.append({"text": "Allergie-Angaben widersprüchlich: " + allergy_yes[0]["fact"] +
+                                  f" (S. {allergy_yes[0]['page']}) vs. 'keine bekannt' (S. {allergy_no[0]['page']})",
+                          "sources": sorted({allergy_yes[0]["page"], allergy_no[0]["page"]})})
+
+    findings = {}
+    for f in all_facts["findings"]:
+        findings.setdefault(f["fact"], set()).add(f["page"])
+
+    contacts = {}
+    for c in all_facts["contacts"]:
+        contacts.setdefault(c["fact"], set()).add(c["page"])
+
+    diags = {}
+    for d in sorted(all_facts["diagnoses"], key=lambda d: d["date"] or "", reverse=True):
+        key = d["icd10"]
+        if key not in diags:
+            diags[key] = {"text": d["text"], "icd10": key, "date": d["date"], "sources": set()}
+        diags[key]["sources"].add(d["page"])
+
+    return {
+        "cave": cave_out,
+        "findings": [{"text": k, "sources": sorted(v)} for k, v in findings.items()],
+        "contacts": [{"text": k, "sources": sorted(v)} for k, v in contacts.items()],
+        "diagnoses": [{**d, "sources": sorted(d["sources"])} for d in diags.values()],
+        "medications": sorted(current, key=lambda m: (m["status"] == "stopped", m["name"])),
+        "medication_history": history,
+        "conflicts": conflicts,
+        "warnings": warnings,
+        "labs": lab_out,
+        "timeline": [{"date": d["date"], "text": d["title"], "doc_id": d["doc_id"], "pages": d["pages"]}
+                     for d in sorted(relevant, key=lambda d: d["date"] or "")],
+        "ignored": [{"doc_id": d["doc_id"], "pages": d["pages"], "reason": "nicht medizinisch relevant"}
+                    for d in docs if d["type"] == "irrelevant"],
+    }
+
+# ------------------------------------------------------------------ 6. summary text
+
+def _src(sources):
+    return "[S. " + ", ".join(str(s) for s in sources) + "]"
+
+
+def summary_text(s: dict) -> str:
+    out = []
+    if s["cave"]:
+        out.append("CAVE: " + "; ".join(f"{c['text']} {_src(c['sources'])}" for c in s["cave"]))
+    if s["warnings"]:
+        out.append("Hinweise: " + "; ".join(f"{w['text']} {_src(w['sources'])}" for w in s["warnings"]))
+    if s["findings"]:
+        out.append("Befunde: " + "; ".join(f"{f['text']} {_src(f['sources'])}" for f in s["findings"]))
+    if s["diagnoses"]:
+        out.append("Diagnosen: " + "; ".join(f"{d['text']} ({d['icd10']}) {_src(d['sources'])}" for d in s["diagnoses"][:8]))
+    meds = [m for m in s["medications"] if m["status"] != "stopped"]
+    if meds:
+        out.append("Aktuelle Medikation: " + "; ".join(
+            " ".join(x for x in [m["name"], m["strength"] or "", m["dosing"] or "",
+                                 "(neu)" if m["status"] == "new" else "", _src(m["sources"])] if x) for m in meds))
+    stopped = [m for m in s["medications"] if m["status"] == "stopped"]
+    if stopped:
+        out.append("Abgesetzt: " + "; ".join(f"{m['name']} {_src(m['sources'])}" for m in stopped))
+    if s["conflicts"]:
+        out.append("Widersprüche: " + "; ".join(f"{c['text']} {_src(c['sources'])}" for c in s["conflicts"]))
+    flagged = [l for l in s["labs"] if l["flag"]]
+    if flagged:
+        out.append("Labor: " + "; ".join(f"{l['name']} {l['value']} {l['unit']} {l['flag']}"
+                                         f"{' (' + l['trend'] + ')' if l['trend'] else ''} {_src(l['sources'])}"
+                                         for l in flagged))
+    if s["contacts"]:
+        out.append("Kontakt: " + "; ".join(f"{c['text']} {_src(c['sources'])}" for c in s["contacts"]))
+    return "\n".join(out)
+
+# ------------------------------------------------------------------ run everything
+
+def process_case(folder: Path, out_dir: Path, engine="tesseract", fresh=False, progress=print) -> dict:
+    files = sorted(p for p in folder.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png"))
+    cache_dir = out_dir / "ocr"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    pages = []
+    for i, f in enumerate(files, 1):
+        pages.append(read_page(f, i, engine, cache_dir, fresh))
+        pages[-1]["quality"] = page_quality(pages[-1])     # recomputed, so threshold changes need no new OCR
+        progress(f"[{i}/{len(files)}] {f.name}  quality={pages[-1]['quality']}")
+    docs = group_documents(pages)
+    for p in pages:
+        if p["quality"] == "ok":
+            p["facts"] = extract_page(p)
+    summary = merge(pages, docs)
+    summary["text_de"] = summary_text(summary)
+    result = {
+        "case_id": folder.parent.name if folder.name.startswith("pages") else folder.name,
+        "status": "ready", "engine": engine,
+        "pages": [{"page": p["page"], "file": p["file"], "doc_id": p.get("doc_id"), "doc_type": p.get("doc_type"),
+                   "status": "done" if p["quality"] == "ok" else "retake", "quality": p["quality"],
+                   "sharpness": p["sharpness"], "mean_confidence": p["mean_confidence"]} for p in pages],
+        "documents": docs,
+        "summary": summary,
+    }
+    (out_dir / "case_result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    return result

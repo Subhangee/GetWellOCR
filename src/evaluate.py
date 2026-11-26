@@ -60,3 +60,38 @@ def score_document(pred: ExtractionResult, truth: ExtractionResult) -> dict:
         "dosing_accuracy": dosing_ok / matched if matched else 0.0,
         "dx_f1": dx["f1"],
     }
+
+
+# ---------------------------------------------------------------- whole-case scoring
+
+# needle id -> words that must ALL appear in the case summary (used when the answer
+# file has no "match" list of its own)
+DEFAULT_NEEDLE_MATCH = {
+    "N1": ["Apixaban"], "N2": ["Penicillin"], "N3": ["Schrittmacher"], "N4": ["TEP"],
+    "N5": ["Reanimation", "Intubation"], "N6": ["Tochter"], "N7": ["eGFR", "28"],
+    "N8": ["Kalium", "5,3"], "N9": ["Phenprocoumon", "Apixaban", "Antikoagul"],
+    "N10": ["Glimepirid", "abgesetzt"], "N11": ["Metformin", "eGFR"], "N12": ["LVEF", "40"],
+    "N13": ["Torasemid", "20 mg"], "N14": ["Ramipril", "pausiert"],
+}
+
+
+def score_case(result: dict, answers: dict) -> dict:
+    """Score a case_result.json against <case>_answers.json. Returns numbers plus details."""
+    import json
+    summary = json.dumps({k: v for k, v in result["summary"].items() if k != "text_de"},
+                         ensure_ascii=False).lower()
+    needles = []
+    for n in answers["needles"]:
+        keys = n.get("match") or DEFAULT_NEEDLE_MATCH.get(n["id"], [])
+        needles.append({"id": n["id"], "fact": n["fact"], "found": all(k.lower() in summary for k in keys)})
+    truth = {p: d["type"] for d in answers["documents"] for p in d["pages"]}
+    pred = {p["page"]: p["doc_type"] for p in result["pages"]}
+    judged = [p for p in truth if pred.get(p)]
+    wrong = [{"page": p, "predicted": pred[p], "truth": truth[p]} for p in judged if pred[p] != truth[p]]
+    return {
+        "needles_found": sum(n["found"] for n in needles), "needles_total": len(needles),
+        "pages_classified": len(judged), "pages_correct": len(judged) - len(wrong),
+        "retake": [p["page"] for p in result["pages"] if p["status"] == "retake"],
+        "conflicts_flagged": len(result["summary"]["conflicts"]), "conflicts_truth": len(answers["conflicts"]),
+        "needles": needles, "misclassified": wrong,
+    }
