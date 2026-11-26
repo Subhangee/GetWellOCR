@@ -1,0 +1,838 @@
+{
+  "case_id": "case01",
+  "status": "ready",
+  "patient": {
+    "name": "Helga Beispiel",
+    "birth": "14.03.1948",
+    "age": 78,
+    "sex": "w"
+  },
+  "pages": [
+    {
+      "page": 1,
+      "file": "case01_p01.jpg",
+      "doc_id": "D01",
+      "doc_type": "discharge_letter",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 2,
+      "file": "case01_p02.jpg",
+      "doc_id": "D01",
+      "doc_type": "discharge_letter",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 3,
+      "file": "case01_p03.jpg",
+      "doc_id": "D01",
+      "doc_type": "discharge_letter",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 4,
+      "file": "case01_p04.jpg",
+      "doc_id": "D02",
+      "doc_type": "medication_plan",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 5,
+      "file": "case01_p05.jpg",
+      "doc_id": "D03",
+      "doc_type": "lab_report",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 6,
+      "file": "case01_p06.jpg",
+      "doc_id": "D04",
+      "doc_type": "lab_report",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 7,
+      "file": "case01_p07.jpg",
+      "doc_id": "D05",
+      "doc_type": "referral",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 8,
+      "file": "case01_p08.jpg",
+      "doc_id": "D06",
+      "doc_type": "imaging_report",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 9,
+      "file": "case01_p09.jpg",
+      "doc_id": "D07",
+      "doc_type": "imaging_report",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 10,
+      "file": "case01_p10.jpg",
+      "doc_id": "D08",
+      "doc_type": "surgery_report",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 11,
+      "file": "case01_p11.jpg",
+      "doc_id": "D08",
+      "doc_type": "surgery_report",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 12,
+      "file": "case01_p12.jpg",
+      "doc_id": "D09",
+      "doc_type": "discharge_letter",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 13,
+      "file": "case01_p13.jpg",
+      "doc_id": "D10",
+      "doc_type": "advance_directive",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 14,
+      "file": "case01_p14.jpg",
+      "doc_id": "D11",
+      "doc_type": "nursing_transfer",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 15,
+      "file": "case01_p15.jpg",
+      "doc_id": "D12",
+      "doc_type": "specialist_letter",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 16,
+      "file": "case01_p16.jpg",
+      "doc_id": "D12",
+      "doc_type": "specialist_letter",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 17,
+      "file": "case01_p17.jpg",
+      "doc_id": "D13",
+      "doc_type": "other_medical",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 18,
+      "file": "case01_p18.jpg",
+      "doc_id": "D14",
+      "doc_type": "irrelevant",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 19,
+      "file": "case01_p19.jpg",
+      "doc_id": "D15",
+      "doc_type": "fax_note",
+      "status": "done",
+      "quality": "ok"
+    },
+    {
+      "page": 20,
+      "file": "case01_p20.jpg",
+      "doc_id": "D02",
+      "doc_type": "medication_plan",
+      "status": "retake",
+      "quality": "too_blurry"
+    }
+  ],
+  "documents": [
+    {
+      "doc_id": "D01",
+      "type": "discharge_letter",
+      "title": "Entlassungsbrief Kardiologie",
+      "date": "2026-10-14",
+      "pages": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "doc_id": "D02",
+      "type": "medication_plan",
+      "title": "Medikationsplan Hausärztin (veraltet)",
+      "date": "2026-09-02",
+      "pages": [
+        4,
+        20
+      ]
+    },
+    {
+      "doc_id": "D03",
+      "type": "lab_report",
+      "title": "Laborbefund",
+      "date": "2026-10-06",
+      "pages": [
+        5
+      ]
+    },
+    {
+      "doc_id": "D04",
+      "type": "lab_report",
+      "title": "Laborbefund",
+      "date": "2026-11-18",
+      "pages": [
+        6
+      ]
+    },
+    {
+      "doc_id": "D05",
+      "type": "referral",
+      "title": "Krankenhauseinweisung",
+      "date": "2026-11-25",
+      "pages": [
+        7
+      ]
+    },
+    {
+      "doc_id": "D06",
+      "type": "imaging_report",
+      "title": "CT Thorax",
+      "date": "2026-10-10",
+      "pages": [
+        8
+      ]
+    },
+    {
+      "doc_id": "D07",
+      "type": "imaging_report",
+      "title": "Echokardiographie",
+      "date": "2026-10-12",
+      "pages": [
+        9
+      ]
+    },
+    {
+      "doc_id": "D08",
+      "type": "surgery_report",
+      "title": "OP-Bericht Hüft-TEP rechts",
+      "date": "2023-03-15",
+      "pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "doc_id": "D09",
+      "type": "discharge_letter",
+      "title": "Arztbrief Pneumonie",
+      "date": "2022-02-22",
+      "pages": [
+        12
+      ]
+    },
+    {
+      "doc_id": "D10",
+      "type": "advance_directive",
+      "title": "Patientenverfügung / Vorsorgevollmacht",
+      "date": "2024-06-05",
+      "pages": [
+        13
+      ]
+    },
+    {
+      "doc_id": "D11",
+      "type": "nursing_transfer",
+      "title": "Pflegeüberleitungsbogen",
+      "date": "2026-11-24",
+      "pages": [
+        14
+      ]
+    },
+    {
+      "doc_id": "D12",
+      "type": "specialist_letter",
+      "title": "Bericht Diabetologie (veraltet)",
+      "date": "2021-07-08",
+      "pages": [
+        15,
+        16
+      ]
+    },
+    {
+      "doc_id": "D13",
+      "type": "other_medical",
+      "title": "Diabetes-Verlaufsbogen",
+      "date": "2026-11",
+      "pages": [
+        17
+      ]
+    },
+    {
+      "doc_id": "D14",
+      "type": "irrelevant",
+      "title": "Schreiben Krankenkasse",
+      "date": null,
+      "pages": [
+        18
+      ]
+    },
+    {
+      "doc_id": "D15",
+      "type": "fax_note",
+      "title": "Fax Hausärztin (handschriftlich)",
+      "date": "2026-11-20",
+      "pages": [
+        19
+      ]
+    }
+  ],
+  "summary": {
+    "cave": [
+      {
+        "text": "Orale Antikoagulation: Apixaban 2,5 mg 1-0-1",
+        "sources": [
+          {
+            "page": 2,
+            "doc_id": "D01"
+          },
+          {
+            "page": 3,
+            "doc_id": "D01"
+          }
+        ]
+      },
+      {
+        "text": "Penicillin-Allergie (Exanthem 2022), nur im alten Arztbrief dokumentiert",
+        "sources": [
+          {
+            "page": 12,
+            "doc_id": "D09"
+          }
+        ]
+      },
+      {
+        "text": "Herzschrittmacher (VVI) in situ",
+        "sources": [
+          {
+            "page": 11,
+            "doc_id": "D08"
+          },
+          {
+            "page": 8,
+            "doc_id": "D06"
+          }
+        ]
+      },
+      {
+        "text": "Hüft-TEP rechts (Implantat, 2023)",
+        "sources": [
+          {
+            "page": 10,
+            "doc_id": "D08"
+          }
+        ]
+      },
+      {
+        "text": "Patientenverfügung: keine Reanimation, keine Intubation/invasive Beatmung; nicht-invasive Maßnahmen erwünscht",
+        "sources": [
+          {
+            "page": 13,
+            "doc_id": "D10"
+          }
+        ]
+      }
+    ],
+    "contacts": [
+      {
+        "text": "Tochter Sabine Beispiel, bevollmächtigt, Tel. 0151 00000000",
+        "sources": [
+          {
+            "page": 13,
+            "doc_id": "D10"
+          },
+          {
+            "page": 14,
+            "doc_id": "D11"
+          }
+        ]
+      }
+    ],
+    "diagnoses": [
+      {
+        "text": "Herzinsuffizienz HFmrEF, LVEF 40 %",
+        "icd10": "I50.13",
+        "sources": [
+          {
+            "page": 1,
+            "doc_id": "D01"
+          },
+          {
+            "page": 9,
+            "doc_id": "D07"
+          }
+        ]
+      },
+      {
+        "text": "Permanentes Vorhofflimmern",
+        "icd10": "I48.2",
+        "sources": [
+          {
+            "page": 1,
+            "doc_id": "D01"
+          }
+        ]
+      },
+      {
+        "text": "Chronische Niereninsuffizienz G4 (eGFR 28)",
+        "icd10": "N18.4",
+        "sources": [
+          {
+            "page": 1,
+            "doc_id": "D01"
+          },
+          {
+            "page": 6,
+            "doc_id": "D04"
+          }
+        ]
+      },
+      {
+        "text": "Diabetes mellitus Typ 2",
+        "icd10": "E11.90",
+        "sources": [
+          {
+            "page": 1,
+            "doc_id": "D01"
+          }
+        ]
+      },
+      {
+        "text": "Arterielle Hypertonie",
+        "icd10": "I10.90",
+        "sources": [
+          {
+            "page": 1,
+            "doc_id": "D01"
+          }
+        ]
+      },
+      {
+        "text": "Mitralklappeninsuffizienz Grad II",
+        "icd10": "I34.0",
+        "sources": [
+          {
+            "page": 1,
+            "doc_id": "D01"
+          },
+          {
+            "page": 9,
+            "doc_id": "D07"
+          }
+        ]
+      }
+    ],
+    "medications": [
+      {
+        "name": "Apixaban",
+        "strength": "2,5 mg",
+        "form": "Tbl.",
+        "dosing": "1-0-1-0",
+        "status": "active",
+        "sources": [
+          {
+            "page": 2,
+            "doc_id": "D01"
+          },
+          {
+            "page": 3,
+            "doc_id": "D01"
+          }
+        ],
+        "note": "seit 10/2026 statt Phenprocoumon"
+      },
+      {
+        "name": "Bisoprolol",
+        "strength": "2,5 mg",
+        "form": "Tbl.",
+        "dosing": "1-0-0-0",
+        "status": "active",
+        "sources": [
+          {
+            "page": 3,
+            "doc_id": "D01"
+          },
+          {
+            "page": 4,
+            "doc_id": "D02"
+          }
+        ]
+      },
+      {
+        "name": "Ramipril",
+        "strength": "2,5 mg",
+        "form": "Tbl.",
+        "dosing": "1-0-0-0",
+        "status": "active",
+        "sources": [
+          {
+            "page": 3,
+            "doc_id": "D01"
+          },
+          {
+            "page": 4,
+            "doc_id": "D02"
+          }
+        ],
+        "note": "Kalium 5,3"
+      },
+      {
+        "name": "Torasemid",
+        "strength": "20 mg",
+        "form": "Tbl.",
+        "dosing": "1-0-0-0",
+        "status": "active",
+        "sources": [
+          {
+            "page": 3,
+            "doc_id": "D01"
+          }
+        ],
+        "note": "erhöht von 10 mg; Fax: ggf. 2x 20 mg"
+      },
+      {
+        "name": "Empagliflozin",
+        "strength": "10 mg",
+        "form": "Tbl.",
+        "dosing": "1-0-0-0",
+        "status": "new",
+        "sources": [
+          {
+            "page": 2,
+            "doc_id": "D01"
+          },
+          {
+            "page": 3,
+            "doc_id": "D01"
+          }
+        ]
+      },
+      {
+        "name": "Atorvastatin",
+        "strength": "20 mg",
+        "form": "Tbl.",
+        "dosing": "0-0-1-0",
+        "status": "active",
+        "sources": [
+          {
+            "page": 3,
+            "doc_id": "D01"
+          },
+          {
+            "page": 4,
+            "doc_id": "D02"
+          }
+        ]
+      },
+      {
+        "name": "Metformin",
+        "strength": "500 mg",
+        "form": "Tbl.",
+        "dosing": "1-0-0-0",
+        "status": "active",
+        "sources": [
+          {
+            "page": 3,
+            "doc_id": "D01"
+          },
+          {
+            "page": 17,
+            "doc_id": "D13"
+          }
+        ],
+        "note": "eGFR 28: Kontraindikation prüfen"
+      },
+      {
+        "name": "Pantoprazol",
+        "strength": "20 mg",
+        "form": "Tbl.",
+        "dosing": "1-0-0-0",
+        "status": "active",
+        "sources": [
+          {
+            "page": 3,
+            "doc_id": "D01"
+          },
+          {
+            "page": 4,
+            "doc_id": "D02"
+          }
+        ]
+      },
+      {
+        "name": "Glimepirid",
+        "strength": "1 mg",
+        "form": "Tbl.",
+        "dosing": "1-0-0-0",
+        "status": "stopped",
+        "sources": [
+          {
+            "page": 19,
+            "doc_id": "D15"
+          }
+        ],
+        "note": "abgesetzt 20.11.2026 wg. Hypoglykämien"
+      },
+      {
+        "name": "Phenprocoumon",
+        "strength": "3 mg",
+        "form": "Tbl.",
+        "dosing": "nach INR",
+        "status": "stopped",
+        "sources": [
+          {
+            "page": 2,
+            "doc_id": "D01"
+          },
+          {
+            "page": 3,
+            "doc_id": "D01"
+          }
+        ],
+        "note": "ersetzt durch Apixaban"
+      }
+    ],
+    "conflicts": [
+      {
+        "id": "C1",
+        "text": "Medikationsplan (09/2026) nennt Phenprocoumon, Entlassungsbrief (10/2026) Apixaban. Aktuell gilt Apixaban; Doppel-Antikoagulation ausschließen.",
+        "sources": [
+          {
+            "page": 4,
+            "doc_id": "D02"
+          },
+          {
+            "page": 3,
+            "doc_id": "D01"
+          }
+        ]
+      },
+      {
+        "id": "C2",
+        "text": "Torasemid 10 mg (Medikationsplan) vs. 20 mg (Entlassungsbrief) vs. ggf. 2x 20 mg (Fax).",
+        "sources": [
+          {
+            "page": 4,
+            "doc_id": "D02"
+          },
+          {
+            "page": 3,
+            "doc_id": "D01"
+          },
+          {
+            "page": 19,
+            "doc_id": "D15"
+          }
+        ]
+      },
+      {
+        "id": "C3",
+        "text": "Metformin 1000 mg 1-0-1 (Medikationsplan) vs. 500 mg 1-0-0 (Entlassungsbrief); eGFR inzwischen 28.",
+        "sources": [
+          {
+            "page": 4,
+            "doc_id": "D02"
+          },
+          {
+            "page": 3,
+            "doc_id": "D01"
+          },
+          {
+            "page": 6,
+            "doc_id": "D04"
+          }
+        ]
+      },
+      {
+        "id": "C4",
+        "text": "Glimepirid noch im Entlassungsbrief, laut Fax vom 20.11.2026 abgesetzt.",
+        "sources": [
+          {
+            "page": 3,
+            "doc_id": "D01"
+          },
+          {
+            "page": 19,
+            "doc_id": "D15"
+          }
+        ]
+      },
+      {
+        "id": "C5",
+        "text": "Pflegeüberleitung: 'Allergien: keine bekannt', Arztbrief 2022: Penicillin-Allergie.",
+        "sources": [
+          {
+            "page": 14,
+            "doc_id": "D11"
+          },
+          {
+            "page": 12,
+            "doc_id": "D09"
+          }
+        ]
+      }
+    ],
+    "labs": [
+      {
+        "name": "eGFR",
+        "value": "28",
+        "unit": "ml/min/1,73m²",
+        "flag": "L",
+        "trend": "32 → 28",
+        "sources": [
+          {
+            "page": 5,
+            "doc_id": "D03"
+          },
+          {
+            "page": 6,
+            "doc_id": "D04"
+          }
+        ]
+      },
+      {
+        "name": "Kalium",
+        "value": "5,3",
+        "unit": "mmol/l",
+        "flag": "H",
+        "sources": [
+          {
+            "page": 6,
+            "doc_id": "D04"
+          }
+        ]
+      },
+      {
+        "name": "NT-proBNP",
+        "value": "4120",
+        "unit": "pg/ml",
+        "flag": "H",
+        "trend": "2840 → 4120",
+        "sources": [
+          {
+            "page": 5,
+            "doc_id": "D03"
+          },
+          {
+            "page": 6,
+            "doc_id": "D04"
+          }
+        ]
+      }
+    ],
+    "timeline": [
+      {
+        "date": "2021-07-08",
+        "text": "Bericht Diabetologie (veraltet)",
+        "doc_id": "D12"
+      },
+      {
+        "date": "2022-02-22",
+        "text": "Arztbrief Pneumonie",
+        "doc_id": "D09"
+      },
+      {
+        "date": "2023-03-15",
+        "text": "OP-Bericht Hüft-TEP rechts",
+        "doc_id": "D08"
+      },
+      {
+        "date": "2024-06-05",
+        "text": "Patientenverfügung / Vorsorgevollmacht",
+        "doc_id": "D10"
+      },
+      {
+        "date": "2026-09-02",
+        "text": "Medikationsplan Hausärztin (veraltet)",
+        "doc_id": "D02"
+      },
+      {
+        "date": "2026-10-06",
+        "text": "Laborbefund",
+        "doc_id": "D03"
+      },
+      {
+        "date": "2026-10-10",
+        "text": "CT Thorax",
+        "doc_id": "D06"
+      },
+      {
+        "date": "2026-10-12",
+        "text": "Echokardiographie",
+        "doc_id": "D07"
+      },
+      {
+        "date": "2026-10-14",
+        "text": "Entlassungsbrief Kardiologie",
+        "doc_id": "D01"
+      },
+      {
+        "date": "2026-11",
+        "text": "Diabetes-Verlaufsbogen",
+        "doc_id": "D13"
+      },
+      {
+        "date": "2026-11-18",
+        "text": "Laborbefund",
+        "doc_id": "D04"
+      },
+      {
+        "date": "2026-11-20",
+        "text": "Fax Hausärztin (handschriftlich)",
+        "doc_id": "D15"
+      },
+      {
+        "date": "2026-11-24",
+        "text": "Pflegeüberleitungsbogen",
+        "doc_id": "D11"
+      },
+      {
+        "date": "2026-11-25",
+        "text": "Krankenhauseinweisung",
+        "doc_id": "D05"
+      }
+    ],
+    "ignored": [
+      {
+        "doc_id": "D14",
+        "reason": "nicht medizinisch relevant"
+      }
+    ],
+    "text_de": "78-jährige Patientin mit Luftnot bei V.a. erneute kardiale Dekompensation (HFmrEF, LVEF 40 %). CAVE: Apixaban 2,5 mg 1-0-1 [S. 3], Penicillin-Allergie [S. 12], Herzschrittmacher VVI [S. 11], Hüft-TEP re. [S. 10], Patientenverfügung: keine Reanimation/Intubation [S. 13]. eGFR 28 mit Hyperkaliämie 5,3 [S. 6]. Widersprüche in der Medikation: Phenprocoumon vs. Apixaban [S. 4/3], Glimepirid abgesetzt [S. 19], Metformin trotz eGFR unter 30 [S. 17]. Ansprechpartnerin: Tochter (bevollmächtigt) [S. 13]."
+  },
+  "note": "MOCK DATA for frontend development. Fictional patient."
+}

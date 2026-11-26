@@ -1,0 +1,25 @@
+# Secrets: never commit these
+.env
+
+# Anything real or private stays on your laptop only
+data/private/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Cached OCR responses (re-creatable)
+cache/*
+!cache/.gitkeep
+
+# Editors and OS
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated test images and results (re-create with the scripts)
+data/degraded/*.png
+outputs/*.csv.vs/

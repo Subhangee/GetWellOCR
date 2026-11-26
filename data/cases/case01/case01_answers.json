@@ -1,0 +1,459 @@
+{
+  "case_id": "case01",
+  "fictional": true,
+  "patient": {
+    "name": "Helga Beispiel",
+    "birth": "14.03.1948",
+    "age": 78,
+    "sex": "w"
+  },
+  "presentation": "78-jährige Patientin, nächtliche Aufnahme mit Luftnot (V.a. kardiale Dekompensation)",
+  "documents": [
+    {
+      "doc_id": "D01",
+      "type": "discharge_letter",
+      "title": "Entlassungsbrief Kardiologie",
+      "date": "2026-10-14",
+      "pages": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "doc_id": "D02",
+      "type": "medication_plan",
+      "title": "Medikationsplan Hausärztin (veraltet)",
+      "date": "2026-09-02",
+      "pages": [
+        4,
+        20
+      ]
+    },
+    {
+      "doc_id": "D03",
+      "type": "lab_report",
+      "title": "Laborbefund",
+      "date": "2026-10-06",
+      "pages": [
+        5
+      ]
+    },
+    {
+      "doc_id": "D04",
+      "type": "lab_report",
+      "title": "Laborbefund",
+      "date": "2026-11-18",
+      "pages": [
+        6
+      ]
+    },
+    {
+      "doc_id": "D05",
+      "type": "referral",
+      "title": "Krankenhauseinweisung",
+      "date": "2026-11-25",
+      "pages": [
+        7
+      ]
+    },
+    {
+      "doc_id": "D06",
+      "type": "imaging_report",
+      "title": "CT Thorax",
+      "date": "2026-10-10",
+      "pages": [
+        8
+      ]
+    },
+    {
+      "doc_id": "D07",
+      "type": "imaging_report",
+      "title": "Echokardiographie",
+      "date": "2026-10-12",
+      "pages": [
+        9
+      ]
+    },
+    {
+      "doc_id": "D08",
+      "type": "surgery_report",
+      "title": "OP-Bericht Hüft-TEP rechts",
+      "date": "2023-03-15",
+      "pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "doc_id": "D09",
+      "type": "discharge_letter",
+      "title": "Arztbrief Pneumonie",
+      "date": "2022-02-22",
+      "pages": [
+        12
+      ]
+    },
+    {
+      "doc_id": "D10",
+      "type": "advance_directive",
+      "title": "Patientenverfügung / Vorsorgevollmacht",
+      "date": "2024-06-05",
+      "pages": [
+        13
+      ]
+    },
+    {
+      "doc_id": "D11",
+      "type": "nursing_transfer",
+      "title": "Pflegeüberleitungsbogen",
+      "date": "2026-11-24",
+      "pages": [
+        14
+      ]
+    },
+    {
+      "doc_id": "D12",
+      "type": "specialist_letter",
+      "title": "Bericht Diabetologie (veraltet)",
+      "date": "2021-07-08",
+      "pages": [
+        15,
+        16
+      ]
+    },
+    {
+      "doc_id": "D13",
+      "type": "other_medical",
+      "title": "Diabetes-Verlaufsbogen",
+      "date": "2026-11",
+      "pages": [
+        17
+      ]
+    },
+    {
+      "doc_id": "D14",
+      "type": "irrelevant",
+      "title": "Schreiben Krankenkasse",
+      "date": null,
+      "pages": [
+        18
+      ]
+    },
+    {
+      "doc_id": "D15",
+      "type": "fax_note",
+      "title": "Fax Hausärztin (handschriftlich)",
+      "date": "2026-11-20",
+      "pages": [
+        19
+      ]
+    }
+  ],
+  "current_medication": [
+    {
+      "name": "Apixaban",
+      "strength": "2,5 mg",
+      "form": "Tbl.",
+      "dosing": "1-0-1-0",
+      "status": "active",
+      "sources": [
+        2,
+        3
+      ],
+      "note": "seit 10/2026 statt Phenprocoumon"
+    },
+    {
+      "name": "Bisoprolol",
+      "strength": "2,5 mg",
+      "form": "Tbl.",
+      "dosing": "1-0-0-0",
+      "status": "active",
+      "sources": [
+        3,
+        4
+      ]
+    },
+    {
+      "name": "Ramipril",
+      "strength": "2,5 mg",
+      "form": "Tbl.",
+      "dosing": "1-0-0-0",
+      "status": "active",
+      "sources": [
+        3,
+        4
+      ],
+      "note": "Kalium 5,3"
+    },
+    {
+      "name": "Torasemid",
+      "strength": "20 mg",
+      "form": "Tbl.",
+      "dosing": "1-0-0-0",
+      "status": "active",
+      "sources": [
+        3
+      ],
+      "note": "erhöht von 10 mg; Fax: ggf. 2x 20 mg"
+    },
+    {
+      "name": "Empagliflozin",
+      "strength": "10 mg",
+      "form": "Tbl.",
+      "dosing": "1-0-0-0",
+      "status": "new",
+      "sources": [
+        2,
+        3
+      ]
+    },
+    {
+      "name": "Atorvastatin",
+      "strength": "20 mg",
+      "form": "Tbl.",
+      "dosing": "0-0-1-0",
+      "status": "active",
+      "sources": [
+        3,
+        4
+      ]
+    },
+    {
+      "name": "Metformin",
+      "strength": "500 mg",
+      "form": "Tbl.",
+      "dosing": "1-0-0-0",
+      "status": "active",
+      "sources": [
+        3,
+        17
+      ],
+      "note": "eGFR 28: Kontraindikation prüfen"
+    },
+    {
+      "name": "Pantoprazol",
+      "strength": "20 mg",
+      "form": "Tbl.",
+      "dosing": "1-0-0-0",
+      "status": "active",
+      "sources": [
+        3,
+        4
+      ]
+    },
+    {
+      "name": "Glimepirid",
+      "strength": "1 mg",
+      "form": "Tbl.",
+      "dosing": "1-0-0-0",
+      "status": "stopped",
+      "sources": [
+        19
+      ],
+      "note": "abgesetzt 20.11.2026 wg. Hypoglykämien"
+    },
+    {
+      "name": "Phenprocoumon",
+      "strength": "3 mg",
+      "form": "Tbl.",
+      "dosing": "nach INR",
+      "status": "stopped",
+      "sources": [
+        2,
+        3
+      ],
+      "note": "ersetzt durch Apixaban"
+    }
+  ],
+  "conflicts": [
+    {
+      "id": "C1",
+      "text": "Medikationsplan (09/2026) nennt Phenprocoumon, Entlassungsbrief (10/2026) Apixaban. Aktuell gilt Apixaban; Doppel-Antikoagulation ausschließen.",
+      "sources": [
+        4,
+        3
+      ]
+    },
+    {
+      "id": "C2",
+      "text": "Torasemid 10 mg (Medikationsplan) vs. 20 mg (Entlassungsbrief) vs. ggf. 2x 20 mg (Fax).",
+      "sources": [
+        4,
+        3,
+        19
+      ]
+    },
+    {
+      "id": "C3",
+      "text": "Metformin 1000 mg 1-0-1 (Medikationsplan) vs. 500 mg 1-0-0 (Entlassungsbrief); eGFR inzwischen 28.",
+      "sources": [
+        4,
+        3,
+        6
+      ]
+    },
+    {
+      "id": "C4",
+      "text": "Glimepirid noch im Entlassungsbrief, laut Fax vom 20.11.2026 abgesetzt.",
+      "sources": [
+        3,
+        19
+      ]
+    },
+    {
+      "id": "C5",
+      "text": "Pflegeüberleitung: 'Allergien: keine bekannt', Arztbrief 2022: Penicillin-Allergie.",
+      "sources": [
+        14,
+        12
+      ]
+    }
+  ],
+  "needles": [
+    {
+      "id": "N1",
+      "category": "CAVE",
+      "fact": "Orale Antikoagulation: Apixaban 2,5 mg 1-0-1",
+      "sources": [
+        2,
+        3
+      ]
+    },
+    {
+      "id": "N2",
+      "category": "CAVE",
+      "fact": "Penicillin-Allergie (Exanthem 2022), nur im alten Arztbrief dokumentiert",
+      "sources": [
+        12
+      ]
+    },
+    {
+      "id": "N3",
+      "category": "CAVE",
+      "fact": "Herzschrittmacher (VVI) in situ",
+      "sources": [
+        11,
+        8
+      ]
+    },
+    {
+      "id": "N4",
+      "category": "CAVE",
+      "fact": "Hüft-TEP rechts (Implantat, 2023)",
+      "sources": [
+        10
+      ]
+    },
+    {
+      "id": "N5",
+      "category": "CAVE",
+      "fact": "Patientenverfügung: keine Reanimation, keine Intubation/invasive Beatmung; nicht-invasive Maßnahmen erwünscht",
+      "sources": [
+        13
+      ]
+    },
+    {
+      "id": "N6",
+      "category": "Kontakt",
+      "fact": "Tochter Sabine Beispiel, bevollmächtigt, Tel. 0151 00000000",
+      "sources": [
+        13,
+        14
+      ]
+    },
+    {
+      "id": "N7",
+      "category": "Labor",
+      "fact": "eGFR 28 (verschlechtert von 32), CKD G4: Kontrastmittel/Dosierung beachten",
+      "sources": [
+        6,
+        5
+      ]
+    },
+    {
+      "id": "N8",
+      "category": "Labor",
+      "fact": "Hyperkaliämie 5,3 mmol/l unter Ramipril",
+      "sources": [
+        6
+      ]
+    },
+    {
+      "id": "N9",
+      "category": "Medikation",
+      "fact": "Konflikt Phenprocoumon (alt) vs. Apixaban (aktuell)",
+      "sources": [
+        4,
+        3
+      ]
+    },
+    {
+      "id": "N10",
+      "category": "Medikation",
+      "fact": "Glimepirid abgesetzt (Hypoglykämie, BZ 48)",
+      "sources": [
+        19
+      ]
+    },
+    {
+      "id": "N11",
+      "category": "Medikation",
+      "fact": "Metformin trotz eGFR unter 30: prüfen",
+      "sources": [
+        6,
+        17
+      ]
+    },
+    {
+      "id": "N12",
+      "category": "Diagnose",
+      "fact": "Herzinsuffizienz HFmrEF, LVEF 40 %, aktuell V.a. erneute Dekompensation",
+      "sources": [
+        9,
+        7
+      ]
+    },
+    {
+      "id": "N13",
+      "category": "Medikation",
+      "fact": "Torasemid auf 20 mg erhöht (ggf. 2x 20 mg laut Fax)",
+      "sources": [
+        3,
+        19
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "text": "Sitagliptin (2021/2022) ist NICHT aktuelle Medikation",
+      "sources": [
+        12,
+        15
+      ]
+    },
+    {
+      "id": "T2",
+      "text": "Krankenkassenschreiben ist irrelevant und soll ignoriert werden",
+      "sources": [
+        18
+      ]
+    },
+    {
+      "id": "T3",
+      "text": "Seite 20 ist ein unscharfes Duplikat von Seite 4 (Bitte neu fotografieren / Duplikat)",
+      "sources": [
+        20,
+        4
+      ]
+    },
+    {
+      "id": "T4",
+      "text": "Pflegebogen 'Allergien: keine bekannt' ist falsch-negativ",
+      "sources": [
+        14
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+# paper2pc – Python packages (Windows, Python 3.11 or 3.12)
+# Install with:  pip install -r requirements.txt
+
+# App interface
+streamlit>=1.30
+
+# Images and PDFs
+opencv-python-headless>=4.8
+pillow>=10.0
+numpy>=1.26
+pypdfium2>=4.20          # PDF -> image (permissive license, no Poppler needed)
+
+# Reading text (OCR)
+pytesseract>=0.3.10      # needs the Tesseract program installed separately
+azure-ai-documentintelligence>=1.0.0
+
+# Structure, config, evaluation
+pydantic>=2.5
+python-dotenv>=1.0
+pandas>=2.1
+rapidfuzz>=3.5
+matplotlib>=3.8
+
+# Synthetic data
+reportlab>=4.0
+faker>=22.0
+
+# Optional: reads the 2D barcode on German medication plans.
+# If it fails to install or load on Windows, comment it out. Nothing else depends on it.
+pylibdmtx>=0.1.10
