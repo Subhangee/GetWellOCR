@@ -11,7 +11,7 @@ import streamlit as st
 
 from src import config
 from src.export import LANGUAGES, patient_plan_pdf, to_csv, to_fhir, to_json
-from src.extract import read_text
+from src.extract import ENGINES, read_text
 from src.parse import parse_lines
 from src.preprocess import ALL_STEPS, load_image, preprocess
 from src.review import (DX_FIELDS, MED_FIELDS, corrections, dx_rows, finalize_dx,
@@ -23,8 +23,9 @@ st.caption("From paper to PC: medications and diagnoses in seconds. Demo with fi
 # ---------- sidebar ----------
 with st.sidebar:
     st.header("Settings")
-    engine = st.selectbox("OCR engine", ["tesseract", "azure"],
-                          index=0 if config.OCR_ENGINE == "tesseract" else 1)
+    engines = list(ENGINES)
+    engine = st.selectbox("OCR engine", engines,
+                          index=engines.index(config.OCR_ENGINE) if config.OCR_ENGINE in engines else 0)
     steps = st.multiselect("Image cleanup steps", list(ALL_STEPS[1:]), default=list(ALL_STEPS[1:]))
     st.caption(f"Fields below {config.LOW_CONFIDENCE:.0%} confidence are flagged for review.")
 

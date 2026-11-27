@@ -2,6 +2,7 @@ r"""Run the whole case pipeline on a folder of page photos and score it.
 
 Run:   python scripts\process_case.py
        python scripts\process_case.py --pages data\cases\case01\pages_photo --engine azure
+       python scripts\process_case.py --engine paddle --best-of
        add --fresh to ignore cached OCR
 
 Output: outputs/cases/<case>/case_result.json  (same shape as case01_mock_api.json)
@@ -36,11 +37,15 @@ def main():
     ap.add_argument("--pages", default=str(config.DATA_DIR / "cases" / "case01" / "pages_photo"))
     ap.add_argument("--engine", default=config.OCR_ENGINE)
     ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--best-of", action="store_true",
+                    help="read each page in several cleanup variants, keep the best (slower)")
     ap.add_argument("--classifier", choices=["rules", "model", "hybrid"], help="default: CLASSIFIER in .env / config")
     args = ap.parse_args()
 
     if args.classifier:
         config.CLASSIFIER = args.classifier
+    if args.best_of:
+        config.OCR_BEST_OF = True
     folder = Path(args.pages)
     case_dir = folder.parent if folder.name.startswith("pages") else folder
     out_dir = config.OUTPUT_DIR / "cases" / case_dir.name

@@ -74,7 +74,21 @@ except Exception as e:
     report(FAIL, f"Tesseract not found ({type(e).__name__})",
            r"winget install UB-Mannheim.TesseractOCR, then set TESSERACT_CMD in .env")
 
-# 5. .env and Azure
+# 5. PaddleOCR (optional engine)
+try:
+    import paddleocr
+    from src.extract import paddle_models_missing
+    report(OK, f"PaddleOCR {paddleocr.__version__} (optional engine)")
+    missing = paddle_models_missing()
+    if missing:
+        report(WARN, f"PaddleOCR models missing: {', '.join(missing)}",
+               r"Run: python scripts\download_paddle_models.py")
+    else:
+        report(OK, "PaddleOCR PP-OCRv6 models")
+except Exception:
+    report(WARN, "PaddleOCR not installed (optional engine)", "pip install -r requirements-paddle.txt")
+
+# 6. .env and Azure
 root = Path(__file__).resolve().parents[1]
 if (root / ".env").exists():
     report(OK, ".env file exists")

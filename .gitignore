@@ -22,7 +22,12 @@ desktop.ini
 
 # Generated test images and results (re-create with the scripts)
 data/degraded/*.png
-outputs/*.csv.vs/
+outputs/*.csv
+.vs/
 data/cases/*/stress/
 outputs/stress/
 outputs/cases/
+
+# PaddleOCR model files (download with scripts/download_paddle_models.py)
+models/
+__MACOSX/

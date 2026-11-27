@@ -20,9 +20,9 @@ from rapidfuzz import fuzz, process
 
 from . import config
 from .drugs import DRUGS
-from .extract import read_text
+from .extract import read_best, read_text
 from .parse import DOSING, ICD10, ICD10_OCR_FIX, STRENGTH, merge_rows
-from .preprocess import load_image, preprocess, to_gray
+from .preprocess import load_image, preprocess, to_gray, variants
 
 SHARPNESS_MIN = 150          # below: ask for a new photo (blurry page ~ 30, sharp pages ~ 700+)
 CONFIDENCE_MIN = 0.60        # mean OCR confidence below this: text unreadable (fax, heavy noise) -> retake
@@ -36,18 +36,25 @@ def sharpness(gray) -> float:
 
 
 def read_page(path: Path, page: int, engine: str, cache_dir: Path, fresh=False) -> dict:
-    cache = cache_dir / f"{path.stem}_{engine}.json"
+    best_of = config.OCR_BEST_OF
+    cache = cache_dir / f"{path.stem}_{engine}{'_best' if best_of else ''}.json"
     if cache.exists() and not fresh:
         return json.loads(cache.read_text(encoding="utf-8"))
     img = load_image(path)
     sharp = sharpness(to_gray(img))
     clean, steps = preprocess(img)
-    lines = merge_rows(read_text(clean, engine))
+    variant_scores = None
+    if best_of:
+        best, lines, variant_scores = read_best(variants(clean), engine, post=merge_rows)
+        steps.append(f"best of {len(variant_scores)}: {best}")
+    else:
+        lines = merge_rows(read_text(clean, engine))
     confs = [l.confidence for l in lines if l.confidence is not None]
     result = {
         "page": page, "file": path.name, "sharpness": round(sharp),
         "mean_confidence": round(sum(confs) / len(confs), 2) if confs else None,
         "steps": steps,
+        **({"variant_scores": variant_scores} if variant_scores else {}),
         "lines": [{"text": l.text, "conf": l.confidence,
                    "bbox": l.bbox.model_dump() if l.bbox else None} for l in lines],
     }

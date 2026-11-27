@@ -8,7 +8,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.12-0F5E7A?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/UI-Streamlit-0F5E7A?logo=streamlit&logoColor=white)
-![OCR](https://img.shields.io/badge/OCR-Tesseract%20%7C%20Azure%20DI-0F5E7A)
+![OCR](https://img.shields.io/badge/OCR-Tesseract%20%7C%20PaddleOCR%20%7C%20Azure%20DI-0F5E7A)
 ![Offline](https://img.shields.io/badge/AI-runs%20offline-2E7550)
 ![Data](https://img.shields.io/badge/data-fictional%20only-B4182D)
 
@@ -44,7 +44,7 @@ The critical facts are scattered: the **penicillin allergy** is only in a letter
 ```mermaid
 flowchart LR
     A["📱 Capture<br/>phone photos<br/>or PDF"] --> B["🧼 Clean<br/>orientation, lighting,<br/>noise, deskew"]
-    B --> C["📖 Read<br/>Tesseract or<br/>Azure DI"]
+    B --> C["📖 Read<br/>Tesseract, PaddleOCR<br/>or Azure DI"]
     C --> Q{"🔍 Sharp and<br/>readable?"}
     Q -- "no" --> R["📸 Please retake"]
     Q -- "yes" --> D["🗂️ Classify<br/>rules + offline<br/>language model"]
@@ -135,10 +135,13 @@ streamlit run app.py                   # opens http://localhost:8501
 - Python 3.12, Tesseract 5 with the **German** language pack ([UB Mannheim build](https://github.com/UB-Mannheim/tesseract/wiki))
 - Optional: Azure Document Intelligence (EU region). Put endpoint and key in `.env` (**never commit it**)
 - The classifier model (`multilingual-e5-small`, ~120 MB) downloads once, then runs offline
+- Optional: **PaddleOCR (PP-OCRv6)**, a second offline engine. Install with `pip install -r requirements-paddle.txt`, then download the models once (~135 MB) with `python scripts\download_paddle_models.py`. Choose it with `--engine paddle`, `OCR_ENGINE=paddle` in `.env`, or in the app sidebar
+- Optional: **best-of OCR** (`--best-of`, or `OCR_BEST_OF=1` in `.env`) reads every page in three cleanup variants (as cleaned, sharpened, extra contrast) and keeps the reading with the best mix of confidence and amount of text. About 3x slower
 
 ```powershell
 python scripts\process_case.py --classifier rules|model|hybrid
 python scripts\process_case.py --engine azure
+python scripts\process_case.py --engine paddle --best-of
 python scripts\process_case.py --pages data\cases\case01_hard\pages_photo
 python scripts\make_stress_set.py ; python scripts\run_stress.py --quick
 ```
@@ -153,7 +156,7 @@ get_well_OCR/
 ├── views/                  Screens (case workspace, single page, UI components)
 ├── src/                    Pipeline: no UI code, reusable by a backend API
 │   ├── preprocess.py       Image cleanup (orientation, lighting, noise, deskew)
-│   ├── extract.py          OCR: Tesseract or Azure Document Intelligence
+│   ├── extract.py          OCR: Tesseract, PaddleOCR or Azure Document Intelligence; best-of reading
 │   ├── case.py             Multi-page pipeline: quality, classify, extract, merge
 │   ├── doc_classifier.py   Offline language model for document types
 │   ├── report.py           ER handover text
@@ -175,7 +178,7 @@ All patients are **fictional** (every page is marked *FIKTIV*). Main case: *Helg
 ## 🔒 Privacy by design
 
 - 🧪 **Fictional data only** in this repository
-- 💻 **Runs offline** on a laptop: OCR and classification need no cloud
+- 💻 **Runs offline** on a laptop: OCR (Tesseract or PaddleOCR) and classification need no cloud
 - 🇪🇺 Optional Azure services **in an EU region** only
 - 🗑️ Uploaded cases can be **deleted completely** with one click
 - 👩‍⚕️ **Nothing is exported** before a doctor has confirmed it

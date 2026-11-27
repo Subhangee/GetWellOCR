@@ -1,0 +1,10 @@
+# Optional: PaddleOCR engine (PP-OCRv6, runs offline)
+# Install after requirements.txt:   pip install -r requirements-paddle.txt
+# Then download the models once:    python scripts\download_paddle_models.py
+#
+# Note: paddleocr brings its own OpenCV build (opencv-contrib-python), which
+# also provides everything the rest of the app uses from cv2.
+
+paddlepaddle>=3.0
+paddleocr>=3.7,<3.8          # PP-OCRv6 needs PaddleOCR 3.7
+huggingface_hub>=0.24        # model download

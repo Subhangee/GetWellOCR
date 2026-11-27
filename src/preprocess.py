@@ -130,6 +130,21 @@ def flatten_illumination(gray: np.ndarray) -> np.ndarray:
     return np.clip(flat, 0, 255).astype(np.uint8)
 
 
+def sharpen(gray: np.ndarray, amount: float = 0.6, sigma: float = 1.5) -> np.ndarray:
+    """Unsharp mask: subtract a blurred copy to make letter edges crisper (slightly blurry photos)."""
+    blurred = cv2.GaussianBlur(gray, (0, 0), sigma)
+    return cv2.addWeighted(gray, 1 + amount, blurred, -amount, 0)
+
+
+def variants(clean: np.ndarray) -> dict[str, np.ndarray]:
+    """Extra versions of an already cleaned page, for best-of OCR (extract.read_best).
+
+    No single cleanup suits every page, so OCR reads each version and keeps the best.
+    Only pixel values change, never the geometry, so text positions still match the page.
+    """
+    return {"clean": clean, "sharpened": sharpen(clean), "contrast": enhance_contrast(clean)}
+
+
 def upscale(gray: np.ndarray, factor: float = 2.0) -> np.ndarray:
     """Bigger letters help OCR on low-resolution images (fax, small photos)."""
     return cv2.resize(gray, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)

@@ -107,9 +107,60 @@ def read_azure(img: np.ndarray, use_cache: bool = True) -> list[OCRLine]:
     return out
 
 
+# ---------- PaddleOCR PP-OCRv6 (free, offline) ----------
+
+PADDLE_MODELS = ("PP-OCRv6_medium_det", "PP-OCRv6_medium_rec")
+_paddle = None   # loading the models takes a few seconds, so do it once
+
+
+def paddle_models_missing() -> list[str]:
+    """Model folders that are not downloaded yet (empty list = ready)."""
+    return [m for m in PADDLE_MODELS
+            if not (config.PADDLE_MODEL_DIR / m / "inference.pdiparams").exists()]
+
+
+def _paddle_model():
+    global _paddle
+    if _paddle is None:
+        missing = paddle_models_missing()
+        if missing:
+            raise RuntimeError(f"PaddleOCR models missing in {config.PADDLE_MODEL_DIR}: {', '.join(missing)}. "
+                               r"Run: python scripts\download_paddle_models.py")
+        from paddleocr import PaddleOCR
+        det, rec = PADDLE_MODELS
+        _paddle = PaddleOCR(
+            text_detection_model_name=det,
+            text_detection_model_dir=str(config.PADDLE_MODEL_DIR / det),
+            text_recognition_model_name=rec,
+            text_recognition_model_dir=str(config.PADDLE_MODEL_DIR / rec),
+            use_doc_orientation_classify=False,   # preprocess.py already turns pages upright
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+            enable_mkldnn=False,                  # oneDNN crashes on CPU with PaddlePaddle 3.3
+        )
+    return _paddle
+
+
+def read_paddle(img: np.ndarray) -> list[OCRLine]:
+    h, w = img.shape[:2]
+    if img.ndim == 2:                             # PaddleOCR expects a colour image
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    out = []
+    for res in _paddle_model().predict(img):
+        for text, score, box in zip(res["rec_texts"], res["rec_scores"], res["rec_boxes"]):
+            if not str(text).strip():
+                continue
+            x0, y0, x1, y1 = (float(v) for v in box)
+            out.append(OCRLine(text=str(text),
+                               bbox=BoundingBox(x0=x0 / w, y0=y0 / h, x1=x1 / w, y1=y1 / h),
+                               confidence=float(score)))
+    out.sort(key=lambda l: (l.bbox.y0, l.bbox.x0))
+    return out
+
+
 # ---------- single entry point ----------
 
-ENGINES = {"tesseract": read_tesseract, "azure": read_azure}
+ENGINES = {"tesseract": read_tesseract, "azure": read_azure, "paddle": read_paddle}
 
 
 def read_text(img: np.ndarray, engine: str | None = None) -> list[OCRLine]:
@@ -117,3 +168,32 @@ def read_text(img: np.ndarray, engine: str | None = None) -> list[OCRLine]:
     if engine not in ENGINES:
         raise ValueError(f"Unknown engine '{engine}'. Choose from {list(ENGINES)}")
     return ENGINES[engine](img)
+
+
+# ---------- best-of: read several cleanup variants, keep the best ----------
+
+CONFIDENCE_WEIGHT = 0.8   # how sure the engine is
+COVERAGE_WEIGHT = 0.2     # how much text it found, relative to the best variant
+                          # (stops a variant that read only the title, confidently, from winning)
+
+
+def read_best(variants: dict[str, np.ndarray], engine: str | None = None, post=None
+              ) -> tuple[str, list[OCRLine], dict[str, float]]:
+    """Read every variant. Returns (best name, its lines, score per variant).
+
+    All variants must have the same size, so text positions stay valid.
+    post: optional step applied to each reading before scoring (e.g. parse.merge_rows),
+    so the score measures the same lines the rest of the pipeline uses.
+    """
+    readings = {name: read_text(img, engine) for name, img in variants.items()}
+    if post:
+        readings = {name: post(lines) for name, lines in readings.items()}
+    chars = {name: sum(len(l.text) for l in lines) for name, lines in readings.items()}
+    most = max(chars.values()) or 1
+    scores = {}
+    for name, lines in readings.items():
+        confs = [l.confidence for l in lines if l.confidence is not None]
+        mean_conf = sum(confs) / len(confs) if confs else 0.0
+        scores[name] = round(CONFIDENCE_WEIGHT * mean_conf + COVERAGE_WEIGHT * chars[name] / most, 3)
+    best = max(scores, key=scores.get)
+    return best, readings[best], scores

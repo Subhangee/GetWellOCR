@@ -17,6 +17,7 @@ import streamlit as st
 from src import config, store
 from src.case import CONFIDENCE_MIN, SHARPNESS_MIN, process_case, summary_text
 from src.evaluate import score_case
+from src.extract import ENGINES, paddle_models_missing
 from src.report import er_report
 from src.export import LANGUAGES, patient_plan_pdf, to_csv, to_fhir
 from views.components import (DOC_TYPE_LABELS, FACT_LABELS, STATUS_LABELS, card, cave_panel, chip, cleaned_page,
@@ -56,12 +57,18 @@ with st.sidebar:
                         st.error(str(e))
 
     st.markdown("### Verarbeitung")
-    engine = st.radio("Texterkennung", ["tesseract", "azure"], horizontal=True,
-                      index=0 if config.OCR_ENGINE == "tesseract" else 1,
-                      help="Tesseract läuft offline. Azure Document Intelligence (EU-Region) liest Handschrift "
-                           "und Tabellen besser.")
+    engines = list(ENGINES)
+    engine = st.radio("Texterkennung", engines, horizontal=True,
+                      index=engines.index(config.OCR_ENGINE) if config.OCR_ENGINE in engines else 0,
+                      help="Tesseract und PaddleOCR (PP-OCRv6) laufen offline. Azure Document Intelligence "
+                           "(EU-Region) liest Handschrift und Tabellen besser.")
     if engine == "azure" and not (config.AZURE_DI_ENDPOINT and config.AZURE_DI_KEY):
         st.warning("Azure-Zugangsdaten fehlen in .env.")
+    if engine == "paddle" and paddle_models_missing():
+        st.warning("PaddleOCR-Modelle fehlen. Ausführen: python scripts\\download_paddle_models.py")
+    config.OCR_BEST_OF = st.toggle("Best-of: 3 Bildvarianten lesen", value=config.OCR_BEST_OF,
+                                   help="Liest jede Seite in drei Bereinigungs-Varianten und behält das beste "
+                                        "Ergebnis. Etwa 3x langsamer.")
     fresh = st.toggle("Texterkennung neu ausführen", value=False,
                       help="Aus: gespeicherte Ergebnisse verwenden (schnell, offline).")
     run = st.button("▶ Fall verarbeiten", type="primary", use_container_width=True, disabled=not case_id)
