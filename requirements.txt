@@ -1,0 +1,6 @@
+# Install PaddlePaddle separately using README instructions.
+paddleocr>=3.3,<4
+opencv-python>=4.10,<5
+numpy>=1.26,<3
+pymupdf>=1.26
+Pillow>=10
