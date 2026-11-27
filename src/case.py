@@ -123,6 +123,22 @@ def find_date(text: str) -> str | None:
     return None
 
 
+ISSUER_WORDS = re.compile(r"klinik|praxis|mvz|labor|pflegedienst|krankenhaus|zentrum|institut|krankenkasse|apotheke",
+                          re.IGNORECASE)
+DOCTOR = re.compile(r"(?:Prof\.\s*)?Dr\.\s*med\.\s*[A-ZÄÖÜ]\.\s*[A-ZÄÖÜ][\wäöüß-]+")
+
+
+def find_issuer(text: str) -> str | None:
+    """Who wrote the document: institution in the letterhead, else the first doctor named."""
+    for line in text.splitlines()[:6]:
+        if ISSUER_WORDS.search(line) and len(line) >= 8 and not re.match(r"^\W*\d", line):
+            line = re.sub(r"\s*[({]fiktiv[)}]?\s*", " ", line, flags=re.IGNORECASE)
+            line = re.sub(r"[-–—·]\s*\d{2}\.\d{2}\.\d{4}.*$", "", line)          # trailing date
+            return line.strip(" -—·")
+    m = DOCTOR.search(text)
+    return m.group(0) if m else None
+
+
 def group_documents(pages: list[dict]) -> list[dict]:
     docs = []
     for p in pages:
@@ -136,7 +152,7 @@ def group_documents(pages: list[dict]) -> list[dict]:
             continue
         doc_type, conf = classify(text)
         doc = {"doc_id": f"D{len(docs) + 1:02d}", "type": doc_type, "title": TYPE_TITLES.get(doc_type, doc_type),
-               "type_confidence": conf, "date": find_date(text), "pages": [p["page"]]}
+               "type_confidence": conf, "date": find_date(text), "issuer": find_issuer(text), "pages": [p["page"]]}
         docs.append(doc)
         p["doc_type"], p["doc_id"] = doc_type, doc["doc_id"]
     return docs
@@ -437,6 +453,37 @@ def summary_text(s: dict) -> str:
 
 # ------------------------------------------------------------------ run everything
 
+PATIENT_LINE = re.compile(r"Pat(?:ient(?:in)?)?\.?:\s*([A-ZÄÖÜ][\wäöüß-]+(?:\s+[A-ZÄÖÜ][\wäöüß-]+)+),\s*geb\.?\s*(\d{2}\.\d{2}\.\d{4})")
+
+
+def find_patient(pages: list[dict]) -> dict:
+    """Most frequent 'Pat.: Name, geb. dd.mm.yyyy' across all pages (OCR typos are outvoted)."""
+    votes = {}
+    for p in pages:
+        for m in PATIENT_LINE.finditer(page_text(p)):
+            votes[(m.group(1).strip(), m.group(2))] = votes.get((m.group(1).strip(), m.group(2)), 0) + 1
+    if not votes:
+        return {"name": None, "birth": None}
+    (name, birth), _ = max(votes.items(), key=lambda kv: kv[1])
+    return {"name": name, "birth": birth}
+
+
+def page_facts(p: dict) -> list[dict]:
+    """Compact list of what was found on a page (for highlighting in the app)."""
+    out = []
+    for kind, items in p.get("facts", {}).items():
+        for f in items:
+            label = f.get("name") or f.get("fact") or f.get("text") or ""
+            if kind == "labs":
+                label = f"{f['name']} {f['value']} {f['unit']}".strip()
+            elif kind == "meds":
+                label = " ".join(x for x in [f["name"], f.get("strength"), f.get("dosing"), f.get("status")] if x)
+            elif kind == "diagnoses":
+                label = f"{f['text']} ({f['icd10']})"
+            out.append({"kind": kind, "label": label, "source_text": f.get("source_text")})
+    return out
+
+
 def process_case(folder: Path, out_dir: Path, engine="tesseract", fresh=False, progress=print) -> dict:
     files = sorted(p for p in folder.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png"))
     cache_dir = out_dir / "ocr"
@@ -454,10 +501,12 @@ def process_case(folder: Path, out_dir: Path, engine="tesseract", fresh=False, p
     summary["text_de"] = summary_text(summary)
     result = {
         "case_id": folder.parent.name if folder.name.startswith("pages") else folder.name,
-        "status": "ready", "engine": engine,
+        "status": "ready", "engine": engine, "processed_at": datetime.now().isoformat(timespec="seconds"),
+        "patient": find_patient([p for p in pages if p["quality"] == "ok"]),
         "pages": [{"page": p["page"], "file": p["file"], "doc_id": p.get("doc_id"), "doc_type": p.get("doc_type"),
                    "status": "done" if p["quality"] == "ok" else "retake", "quality": p["quality"],
-                   "sharpness": p["sharpness"], "mean_confidence": p["mean_confidence"]} for p in pages],
+                   "sharpness": p["sharpness"], "mean_confidence": p["mean_confidence"],
+                   "facts": page_facts(p)} for p in pages],
         "documents": docs,
         "summary": summary,
     }

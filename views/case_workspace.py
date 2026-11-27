@@ -1,0 +1,442 @@
+"""Case workspace: many pages of one patient -> sorted documents -> reviewed ER overview.
+
+Flow on screen (mirrors the pipeline):
+  sidebar   pick or create a case · choose the OCR engine · process
+  header    patient, case, key numbers
+  tabs      ER summary · Pages · Medication (doctor review) · Labs & findings · Documents · Export · Evaluation
+"""
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime
+
+import pandas as pd
+import streamlit as st
+
+from src import config, store
+from src.case import CONFIDENCE_MIN, SHARPNESS_MIN, process_case, summary_text
+from src.evaluate import score_case
+from src.report import er_report
+from src.export import LANGUAGES, patient_plan_pdf, to_csv, to_fhir
+from views.components import (DOC_TYPE_LABELS, FACT_LABELS, STATUS_LABELS, card, chip, cleaned_page,
+                              doc_chip, esc, highlight, html_block, inject_css, legend, ocr_cache, sources,
+                              thumbnail)
+
+inject_css()
+MED_STATUSES = ["active", "new", "paused", "stopped"]
+
+# ================================================================== sidebar: case + processing
+
+cases = store.list_cases()
+with st.sidebar:
+    st.markdown("### Fall")
+    labels = {c["id"]: f"{c['label']}  ·  {c['n_pages']} Seiten{'  · privat' if c['private'] else ''}" for c in cases}
+    ids = list(labels)
+    default = st.session_state.get("case_id")
+    case_id = st.selectbox("Fall auswählen", ids, format_func=labels.get,
+                           index=ids.index(default) if default in ids else 0) if ids else None
+    st.session_state.case_id = case_id
+
+    with st.expander("➕ Neuer Fall (Fotos hochladen)", expanded=not ids):
+        with st.form("new_case", clear_on_submit=True):
+            label = st.text_input("Bezeichnung", placeholder="z. B. Notaufnahme Bett 4")
+            files = st.file_uploader("Fotos oder PDFs (mehrere möglich, Reihenfolge = Seitenreihenfolge)",
+                                     type=store.UPLOAD_TYPES, accept_multiple_files=True)
+            st.caption("Nur fiktive oder anonymisierte Dokumente verwenden.")
+            if st.form_submit_button("Fall anlegen", type="primary", use_container_width=True):
+                if not files:
+                    st.error("Bitte mindestens eine Datei auswählen.")
+                else:
+                    try:
+                        new_id = store.create_case(label or "Neuer Fall", [(f.name, f.getvalue()) for f in files])
+                        st.session_state.case_id = new_id
+                        st.rerun()
+                    except RuntimeError as e:
+                        st.error(str(e))
+
+    st.markdown("### Verarbeitung")
+    engine = st.radio("Texterkennung", ["tesseract", "azure"], horizontal=True,
+                      index=0 if config.OCR_ENGINE == "tesseract" else 1,
+                      help="Tesseract läuft offline. Azure Document Intelligence (EU-Region) liest Handschrift "
+                           "und Tabellen besser.")
+    if engine == "azure" and not (config.AZURE_DI_ENDPOINT and config.AZURE_DI_KEY):
+        st.warning("Azure-Zugangsdaten fehlen in .env.")
+    fresh = st.toggle("Texterkennung neu ausführen", value=False,
+                      help="Aus: gespeicherte Ergebnisse verwenden (schnell, offline).")
+    run = st.button("▶ Fall verarbeiten", type="primary", use_container_width=True, disabled=not case_id)
+
+    st.divider()
+    st.caption("Get Well OCR · Healthcare Hackathon Bayern 2026 · Demo mit fiktiven Daten")
+
+if not case_id:
+    st.title("Get Well OCR")
+    st.info("Noch kein Fall vorhanden. Links einen neuen Fall anlegen oder `python scripts\\generate_case.py` ausführen.")
+    st.stop()
+
+case = next(c for c in cases if c["id"] == case_id)
+out = store.out_dir(case_id)
+files = store.page_files(case["dir"])
+
+if run:
+    bar = st.progress(0.0, text="Starte …")
+
+    def _progress(msg: str):
+        m = re.match(r"\[(\d+)/(\d+)\]", msg)
+        if m:
+            bar.progress(int(m.group(1)) / int(m.group(2)), text=f"Seite {m.group(1)} von {m.group(2)} gelesen")
+
+    with st.spinner("Seiten werden gelesen, sortiert und zusammengeführt …"):
+        process_case(case["pages_dir"], out, engine, fresh, progress=_progress)
+    bar.empty()
+    st.session_state.pop(f"review_{case_id}", None)
+    st.toast("Fall verarbeitet", icon="✅")
+
+result = store.load_result(case_id)
+
+# ================================================================== header
+
+patient = (result or {}).get("patient") or {}
+pname = patient.get("name") or case["label"]
+birth = f"geb. {patient['birth']}" if patient.get("birth") else ""
+processed = (result or {}).get("processed_at", "")
+html_block(f"""
+<div class="gw-header">
+  <div><div class="name">{esc(pname)}</div>
+       <div class="meta">{esc(birth)} · Fall <code>{esc(case_id)}</code> · {case['n_pages']} Seiten</div></div>
+  <div class="meta" style="text-align:right">
+    {chip('FIKTIVE DATEN', '#b91c1c') if not case['private'] else chip('PRIVAT', '#475569')}
+    {chip(result['engine']) if result else ''}<br>
+    {('verarbeitet ' + esc(processed.replace('T', ' '))) if processed else 'noch nicht verarbeitet'}
+  </div>
+</div>""")
+
+if not result:
+    st.info(f"{case['n_pages']} Seiten bereit. Links auf **▶ Fall verarbeiten** klicken.")
+    cols = st.columns(6)
+    for i, f in enumerate(files):
+        with cols[i % 6]:
+            st.image(thumbnail(str(f), f.stat().st_mtime), caption=f"S. {i + 1}", use_container_width=True)
+    st.stop()
+
+summary, pages, docs = result["summary"], result["pages"], result["documents"]
+retake = [p for p in pages if p["status"] == "retake"]
+answers = json.loads(case["answers"].read_text(encoding="utf-8")) if case["answers"] else None
+score = score_case(result, answers) if answers else None
+
+# ------------------------------------------------------------------ doctor review state (persisted)
+
+def _machine_rows() -> list[dict]:
+    conflict_names = {m["name"] for m in summary["medications"]
+                      if any(m["name"] in c["text"] for c in summary["conflicts"] + summary["warnings"])}
+    return [{"confirmed": False, "name": m["name"], "strength": m.get("strength") or "",
+             "dosing": m.get("dosing") or "", "status": m["status"],
+             "flag": "⚠ prüfen" if m["name"] in conflict_names else "",
+             "sources": ", ".join(str(s) for s in m["sources"])} for m in summary["medications"]]
+
+
+key = f"review_{case_id}"
+if key not in st.session_state:
+    saved = store.load_review(case_id)
+    fresh_review = not saved or saved.get("processed_at") != result.get("processed_at")
+    st.session_state[key] = ({"processed_at": result.get("processed_at"), "meds": _machine_rows(),
+                              "machine": _machine_rows(), "conflicts_ok": [], "reviewer": ""}
+                             if fresh_review else saved)
+review = st.session_state[key]
+
+
+def _save_review():
+    store.save_review(case_id, review)
+
+
+def _audit() -> list[dict]:
+    machine = {m["name"]: m for m in review["machine"]}
+    changes = []
+    for row in review["meds"]:
+        before = machine.get(row["name"])
+        for field in ("strength", "dosing", "status"):
+            if before and str(before[field]) != str(row[field]):
+                changes.append({"medication": row["name"], "field": field, "machine": before[field],
+                                "doctor": row[field]})
+    return changes
+
+
+n_unconfirmed = sum(not r["confirmed"] for r in review["meds"])
+n_open_conflicts = len(summary["conflicts"]) - len(review["conflicts_ok"])
+
+m = st.columns(6)
+m[0].metric("Seiten", len(pages), help="Fotografierte Seiten in diesem Fall")
+m[1].metric("Dokumente", len(docs))
+m[2].metric("Neu fotografieren", len(retake), delta="bitte prüfen" if retake else None, delta_color="inverse")
+m[3].metric("Widersprüche offen", max(n_open_conflicts, 0))
+m[4].metric("Medikamente bestätigt", f"{len(review['meds']) - n_unconfirmed}/{len(review['meds'])}")
+if score:
+    m[5].metric("Kritische Fakten", f"{score['needles_found']}/{score['needles_total']}",
+                help="Gegen die Lösungsdatei dieses Testfalls")
+else:
+    m[5].metric("Hinweise", len(summary["warnings"]))
+
+if retake:
+    st.warning("**Bitte neu fotografieren:** " + ", ".join(
+        f"Seite {p['page']} ({'zu unscharf' if p['quality'] == 'too_blurry' else 'Text unlesbar'})" for p in retake))
+
+tabs = st.tabs(["🩺 Notaufnahme-Übersicht", "📄 Seiten", "💊 Medikation", "🧪 Labor & Befunde",
+                "🗂 Dokumente", "⬇ Export"] + (["📊 Auswertung"] if score else []))
+
+# ================================================================== tab: ER summary
+
+with tabs[0]:
+    left, right = st.columns([3, 2], gap="large")
+    with left:
+        html_block(card("CAVE", [f"<b>{esc(c['text'])}</b>{sources(c['sources'])}" for c in summary["cave"]], "cave"))
+        warn_items = [f"{esc(w['text'])}{sources(w['sources'])}" for w in summary["warnings"]]
+        html_block(card("Sicherheitshinweise", warn_items, "warn", "Keine automatischen Hinweise."))
+        st.markdown("##### Widersprüche zwischen Dokumenten")
+        if not summary["conflicts"]:
+            st.caption("Keine Widersprüche gefunden.")
+        for i, c in enumerate(summary["conflicts"]):
+            done = i in review["conflicts_ok"]
+            t, b = st.columns([6, 1], vertical_alignment="center")
+            t.markdown(f'<div class="gw-conflict{" done" if done else ""}">{esc(c["text"])}{sources(c["sources"])}</div>',
+                       unsafe_allow_html=True)
+            ok = b.checkbox("geklärt", value=done, key=f"cf_{case_id}_{i}")
+            if ok != done:
+                review["conflicts_ok"] = sorted(set(review["conflicts_ok"]) ^ {i})
+                _save_review()
+                st.rerun()
+    with right:
+        active = [r for r in review["meds"] if r["status"] != "stopped"]
+        meds_html = [f"<b>{esc(r['name'])}</b> {esc(r['strength'])} {esc(r['dosing'])} "
+                     f"{chip(STATUS_LABELS[r['status']], '#0d9488') if r['status'] != 'active' else ''}"
+                     f"{'✔' if r['confirmed'] else ''}{sources(r['sources'].split(', '))}" for r in active]
+        html_block(card("Aktuelle Medikation", meds_html, "info"))
+        stopped = [r for r in review["meds"] if r["status"] == "stopped"]
+        if stopped:
+            html_block(card("Abgesetzt", [f"{esc(r['name'])}{sources(r['sources'].split(', '))}" for r in stopped], "info"))
+        html_block(card("Diagnosen", [f"{esc(d['text'])} <span class='gw-muted'>({esc(d['icd10'])})</span>"
+                                      f"{sources(d['sources'])}" for d in summary["diagnoses"][:10]], "info"))
+        html_block(card("Kontakt / Vollmacht", [f"{esc(c['text'])}{sources(c['sources'])}" for c in summary["contacts"]],
+                        "ok"))
+    st.markdown("##### Übergabetext (Entwurf)")
+    st.caption("Format der Notaufnahme. Endgültige Fassung mit bestätigter Medikation im Tab ⬇ Export.")
+    st.code(er_report(result, review["meds"], "de", confirmed=n_unconfirmed == 0, reviewer=review.get("reviewer", "")),
+            language=None, wrap_lines=True)
+
+# ================================================================== tab: pages
+
+with tabs[1]:
+    f1, f2 = st.columns([2, 3])
+    show = f1.segmented_control("Anzeigen", ["Alle", "Neu fotografieren"], default="Alle", key=f"pf_{case_id}")
+    types = sorted({p["doc_type"] for p in pages if p["doc_type"]}, key=lambda t: DOC_TYPE_LABELS.get(t, t))
+    type_filter = f2.multiselect("Dokumenttyp", types, format_func=lambda t: DOC_TYPE_LABELS.get(t, t),
+                                 key=f"tf_{case_id}")
+    visible = [p for p in pages if (show != "Neu fotografieren" or p["status"] == "retake")
+               and (not type_filter or p["doc_type"] in type_filter)]
+    sel_key = f"sel_{case_id}"
+    st.session_state.setdefault(sel_key, pages[0]["page"])
+
+    cols = st.columns(6)
+    for i, p in enumerate(visible):
+        f = case["pages_dir"] / p["file"]
+        with cols[i % 6]:
+            st.image(thumbnail(str(f), f.stat().st_mtime), use_container_width=True)
+            badge = (chip("NEU FOTOGRAFIEREN", "#b91c1c") if p["status"] == "retake" else doc_chip(p["doc_type"]))
+            html_block(f'<div class="gw-thumbcap"><b>S. {p["page"]}</b> · {p["doc_id"] or "–"}<br>{badge}</div>')
+            if st.button("Öffnen", key=f"open_{case_id}_{p['page']}", use_container_width=True,
+                         type="primary" if st.session_state[sel_key] == p["page"] else "secondary"):
+                st.session_state[sel_key] = p["page"]
+                st.rerun()
+
+    st.divider()
+    page_no = st.session_state[sel_key]
+    p = next(x for x in pages if x["page"] == page_no)
+    f = case["pages_dir"] / p["file"]
+    ocr = ocr_cache(out, p["file"], result["engine"])
+    st.markdown(f"#### Seite {page_no} · {DOC_TYPE_LABELS.get(p['doc_type'], 'nicht zugeordnet')}")
+    c1, c2 = st.columns([3, 2], gap="large")
+    with c1:
+        view = st.segmented_control("Ansicht", ["Foto", "Aufbereitet + Markierungen"],
+                                    default="Aufbereitet + Markierungen" if p["status"] == "done" else "Foto",
+                                    key=f"view_{case_id}")
+        if view == "Foto" or not ocr:
+            st.image(str(f), use_container_width=True)
+        else:
+            clean, _ = cleaned_page(str(f), f.stat().st_mtime)
+            st.image(highlight(clean, ocr["lines"], p.get("facts", [])), use_container_width=True)
+            html_block(legend())
+    with c2:
+        if p["status"] == "retake":
+            reason = (f"zu unscharf (Schärfe {p['sharpness']} < {SHARPNESS_MIN})" if p["quality"] == "too_blurry"
+                      else f"Text kaum lesbar (Lesesicherheit {p['mean_confidence']:.2f} < {CONFIDENCE_MIN})")
+            html_block(card("Bitte neu fotografieren", [esc(reason), "Seite wurde nicht ausgewertet."], "cave"))
+        doc = next((d for d in docs if d["doc_id"] == p["doc_id"]), None)
+        info = [f"Dokument: <b>{esc(doc['title'])}</b> ({esc(doc['doc_id'])}), Seiten {', '.join(map(str, doc['pages']))}"
+                if doc else "Dokument: –",
+                f"Datum: {esc(doc['date'] or 'nicht erkannt')}" if doc else "",
+                f"Bildschärfe: {p['sharpness']}  ·  Lesesicherheit: "
+                f"{p['mean_confidence'] if p['mean_confidence'] is not None else '–'}"]
+        if ocr:
+            info.append("Aufbereitung: " + esc(", ".join(s for s in ocr["steps"] if s != "gray")))
+        html_block(card("Seiteninformation", [i for i in info if i], "info"))
+        facts = p.get("facts", [])
+        html_block(card(f"Gefunden auf dieser Seite ({len(facts)})",
+                        [f"{chip(FACT_LABELS.get(x['kind'], x['kind']))} {esc(x['label'])}" for x in facts[:30]],
+                        "info", "Keine strukturierten Fakten."))
+        if ocr:
+            with st.expander("Erkannter Text"):
+                st.text("\n".join(l["text"] for l in ocr["lines"]))
+
+# ================================================================== tab: medication review
+
+with tabs[2]:
+    st.markdown("##### Medikationsabgleich")
+    st.caption("Aus allen Dokumenten zusammengeführt: neuestes Dokument gilt, Absetzungen haben Vorrang. "
+               "Bitte jede Zeile prüfen, bei Bedarf korrigieren und bestätigen. Änderungen werden protokolliert.")
+    b1, b2, _ = st.columns([1, 1, 4])
+    if b1.button("Alle bestätigen", key=f"all_{case_id}"):
+        for r in review["meds"]:
+            r["confirmed"] = True
+        _save_review()
+        st.session_state[f"ed_ver_{case_id}"] = st.session_state.get(f"ed_ver_{case_id}", 0) + 1
+        st.rerun()
+    if b2.button("Auf Maschinenstand zurücksetzen", key=f"reset_{case_id}"):
+        review["meds"] = [dict(r) for r in review["machine"]]
+        _save_review()
+        st.session_state[f"ed_ver_{case_id}"] = st.session_state.get(f"ed_ver_{case_id}", 0) + 1
+        st.rerun()
+
+    edited = st.data_editor(
+        pd.DataFrame(review["meds"]), key=f"ed_{case_id}_{st.session_state.get(f'ed_ver_{case_id}', 0)}",
+        hide_index=True, use_container_width=True, num_rows="dynamic",
+        column_order=["confirmed", "flag", "name", "strength", "dosing", "status", "sources"],
+        column_config={
+            "confirmed": st.column_config.CheckboxColumn("✔", help="Ärztlich bestätigt", width="small"),
+            "flag": st.column_config.TextColumn("Hinweis", disabled=True, width="small"),
+            "name": st.column_config.TextColumn("Wirkstoff", required=True),
+            "strength": st.column_config.TextColumn("Stärke"),
+            "dosing": st.column_config.TextColumn("Dosierung", help="Mo-Mi-Ab-Na, z. B. 1-0-1-0"),
+            "status": st.column_config.SelectboxColumn("Status", options=MED_STATUSES, required=True),
+            "sources": st.column_config.TextColumn("Quelle (Seiten)", disabled=True),
+        })
+    rows = edited.fillna("").to_dict("records")
+    for r in rows:
+        r["confirmed"] = bool(r.get("confirmed"))
+        r["status"] = r.get("status") or "active"
+    if rows != review["meds"]:
+        review["meds"] = rows
+        _save_review()
+        st.rerun()
+
+    changes = _audit()
+    if changes:
+        with st.expander(f"Korrekturprotokoll ({len(changes)})"):
+            st.dataframe(pd.DataFrame(changes), hide_index=True, use_container_width=True)
+    if summary["medication_history"]:
+        st.caption("Nur in älteren Dokumenten (> 1 Jahr) erwähnt, nicht übernommen: " + ", ".join(
+            f"{h['name']} (S. {', '.join(map(str, h['sources']))})" for h in summary["medication_history"]))
+
+# ================================================================== tab: labs & findings
+
+with tabs[3]:
+    c1, c2 = st.columns([3, 2], gap="large")
+    with c1:
+        st.markdown("##### Laborwerte (neuester Wert, Verlauf)")
+        if summary["labs"]:
+            flag_txt = {"H": "▲ hoch", "L": "▼ niedrig", "": ""}
+            st.dataframe(pd.DataFrame([{"Parameter": l["name"], "Wert": l["value"], "Einheit": l["unit"],
+                                        "": flag_txt.get(l["flag"], l["flag"]), "Verlauf": l["trend"],
+                                        "Quelle": ", ".join(f"S. {s}" for s in l["sources"])}
+                                       for l in summary["labs"]]), hide_index=True, use_container_width=True)
+        else:
+            st.caption("Keine Laborwerte erkannt.")
+    with c2:
+        html_block(card("Befunde", [f"{esc(f['text'])}{sources(f['sources'])}" for f in summary.get("findings", [])]))
+        if summary.get("ignored"):
+            html_block(card("Ignoriert (nicht medizinisch)",
+                            [f"{esc(i['doc_id'])}: Seiten {', '.join(map(str, i['pages']))}" for i in summary["ignored"]]))
+
+# ================================================================== tab: documents
+
+with tabs[4]:
+    st.markdown("##### Zeitstrahl")
+    st.dataframe(pd.DataFrame([{"Datum": t["date"] or "–", "Dokument": t["text"], "ID": t["doc_id"],
+                                "Seiten": ", ".join(map(str, t["pages"]))} for t in summary["timeline"]]),
+                 hide_index=True, use_container_width=True)
+    st.markdown("##### Dokumente")
+    for d in docs:
+        with st.expander(f"{d['doc_id']} · {d['title']} · {d['date'] or 'ohne Datum'} · "
+                         f"{len(d['pages'])} Seite(n)"):
+            html_block(doc_chip(d["type"]) + f'<span class="gw-muted"> Zuordnung sicher zu '
+                                             f'{d["type_confidence"]:.0%}</span>')
+            cols = st.columns(6)
+            for i, pg in enumerate(d["pages"]):
+                f = case["pages_dir"] / pages[pg - 1]["file"]
+                cols[i % 6].image(thumbnail(str(f), f.stat().st_mtime), caption=f"S. {pg}", use_container_width=True)
+
+# ================================================================== tab: export
+
+with tabs[5]:
+    ready = n_unconfirmed == 0
+    if not ready:
+        st.warning(f"Noch {n_unconfirmed} Medikament(e) nicht bestätigt (Tab 💊). "
+                   "Exporte werden erst nach vollständiger ärztlicher Prüfung freigegeben.")
+    reviewer = st.text_input("Geprüft von", value=review.get("reviewer", ""), key=f"rv_{case_id}",
+                             placeholder="Name der Ärztin / des Arztes")
+    if reviewer != review.get("reviewer", ""):
+        review["reviewer"] = reviewer
+        _save_review()
+
+    confirmed_meds = [{"name": r["name"], "strength": r["strength"] or None, "dosing": r["dosing"] or None,
+                       "status": r["status"], "form": None, "as_needed": False,
+                       "sources": [int(s) for s in re.findall(r"\d+", r["sources"])]} for r in review["meds"]]
+    confirmed_summary = {**summary, "medications": confirmed_meds}
+    rep_lang = st.segmented_control("Sprache des Übergabetexts", ["de", "en"], default="de",
+                                    format_func={"de": "Deutsch", "en": "English"}.get, key=f"rl_{case_id}") or "de"
+    er_text = er_report(result, confirmed_meds, rep_lang, confirmed=ready, reviewer=review.get("reviewer", ""))
+    stamp = f"{datetime.now():%Y%m%d-%H%M}"
+
+    st.markdown("##### Übergabetext für das Krankenhaussystem")
+    st.code(er_text, language=None, wrap_lines=True)
+    payload = {**result, "review": {"reviewer": review.get("reviewer"), "updated_at": review.get("updated_at"),
+                                    "medications": review["meds"], "corrections": _audit(),
+                                    "conflicts_acknowledged": review["conflicts_ok"]}}
+    c = st.columns(4)
+    c[0].download_button("Übergabetext (.txt)", er_text.encode("utf-8"), f"{case_id}_summary_{stamp}.txt",
+                         disabled=not ready, use_container_width=True)
+    c[1].download_button("Fall (JSON)", json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+                         f"{case_id}_{stamp}.json", "application/json", disabled=not ready, use_container_width=True)
+    c[2].download_button("FHIR R4 (Entwurf)", to_fhir(case_id, confirmed_meds, summary["diagnoses"]).encode("utf-8"),
+                         f"{case_id}_fhir_{stamp}.json", "application/fhir+json", disabled=not ready,
+                         use_container_width=True)
+    c[3].download_button("Medikation (CSV)", to_csv(review["meds"]), f"{case_id}_medikation_{stamp}.csv",
+                         "text/csv", disabled=not ready, use_container_width=True)
+
+    st.markdown("##### Medikationsplan für Patient:innen")
+    p1, p2, p3 = st.columns([2, 2, 1])
+    lang = p1.selectbox("Sprache", list(LANGUAGES), format_func=LANGUAGES.get, key=f"lang_{case_id}")
+    who = p2.text_input("Name auf dem Plan", value=patient.get("name") or "", key=f"pn_{case_id}")
+    plan_meds = [mm for mm in confirmed_meds if mm["status"] in ("active", "new")]
+    p3.download_button("PDF erstellen", patient_plan_pdf(plan_meds, lang, who) if ready else b"",
+                       f"{case_id}_plan_{lang}.pdf", "application/pdf", disabled=not ready,
+                       use_container_width=True)
+    if case["private"]:
+        st.divider()
+        if st.button("🗑 Fall und alle Daten löschen", key=f"del_{case_id}"):
+            store.delete_case(case_id)
+            st.session_state.pop("case_id", None)
+            st.rerun()
+
+# ================================================================== tab: evaluation (test cases only)
+
+if score:
+    with tabs[6]:
+        st.caption("Nur für Testfälle mit Lösungsdatei: zeigt, was das System gefunden hat.")
+        e = st.columns(4)
+        e[0].metric("Kritische Fakten", f"{score['needles_found']}/{score['needles_total']}")
+        e[1].metric("Seiten richtig zugeordnet", f"{score['pages_correct']}/{score['pages_classified']}")
+        e[2].metric("Widersprüche", f"{score['conflicts_flagged']} (Lösung: {score['conflicts_truth']})")
+        e[3].metric("Neu fotografieren", len(score["retake"]))
+        st.dataframe(pd.DataFrame([{"": "✅" if n["found"] else "❌", "ID": n["id"], "Kritischer Fakt": n["fact"]}
+                                   for n in score["needles"]]), hide_index=True, use_container_width=True)
+        if score["misclassified"]:
+            st.dataframe(pd.DataFrame(score["misclassified"]), hide_index=True)

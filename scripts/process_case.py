@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src import config
 from src.case import process_case
 from src.evaluate import score_case
+from src.report import er_report
 
 def print_score(sc: dict):
     print("\n=== Scorecard ===")
@@ -42,8 +43,10 @@ def main():
     out_dir = config.OUTPUT_DIR / "cases" / case_dir.name
     result = process_case(folder, out_dir, args.engine, args.fresh)
 
-    print("\n=== ER summary (rules, " + args.engine + ") ===")
-    print(result["summary"]["text_de"])
+    report = er_report(result)
+    (out_dir / "er_report_de.txt").write_text(report, encoding="utf-8")
+    print("\n=== ER handover text (rules, " + args.engine + ") ===")
+    print(report)
     print(f"\nSaved {out_dir / 'case_result.json'}")
 
     answers_file = case_dir / f"{case_dir.name}_answers.json"

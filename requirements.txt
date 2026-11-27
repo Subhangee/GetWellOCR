@@ -7,6 +7,7 @@ streamlit>=1.30
 # Images and PDFs
 opencv-python-headless>=4.8
 pillow>=10.0
+pillow-heif>=0.16      # iPhone HEIC photos (optional)
 numpy>=1.26
 pypdfium2>=4.20          # PDF -> image (permissive license, no Poppler needed)
 
