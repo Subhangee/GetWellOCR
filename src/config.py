@@ -29,8 +29,9 @@ AZURE_DI_KEY = os.getenv("AZURE_DI_KEY", "")
 # PaddleOCR PP-OCRv6 (optional, offline). Model folders: run scripts\download_paddle_models.py
 PADDLE_MODEL_DIR = Path(os.getenv("PADDLE_MODEL_DIR", "") or ROOT / "models")
 
-# Best-of OCR: read each page in several cleanup variants, keep the best reading (about 3x slower)
-OCR_BEST_OF = os.getenv("OCR_BEST_OF", "0").strip().lower() in ("1", "true", "yes")
+# Best-of OCR: read each page in several cleanup variants, keep the best reading (about 4x slower).
+# On by default; set OCR_BEST_OF=0 in .env for faster runs.
+OCR_BEST_OF = os.getenv("OCR_BEST_OF", "1").strip().lower() in ("1", "true", "yes")
 
 # Review: fields below this confidence are flagged for the doctor to check
 LOW_CONFIDENCE = 0.80

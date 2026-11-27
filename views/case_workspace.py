@@ -66,9 +66,9 @@ with st.sidebar:
         st.warning("Azure-Zugangsdaten fehlen in .env.")
     if engine == "paddle" and paddle_models_missing():
         st.warning("PaddleOCR-Modelle fehlen. Ausführen: python scripts\\download_paddle_models.py")
-    config.OCR_BEST_OF = st.toggle("Best-of: 3 Bildvarianten lesen", value=config.OCR_BEST_OF,
-                                   help="Liest jede Seite in drei Bereinigungs-Varianten und behält das beste "
-                                        "Ergebnis. Etwa 3x langsamer.")
+    config.OCR_BEST_OF = st.toggle("Best-of: 4 Bildvarianten lesen", value=config.OCR_BEST_OF,
+                                   help="Liest jede Seite in vier Bereinigungs-Varianten und behält das beste "
+                                        "Ergebnis. Etwa 4x langsamer.")
     fresh = st.toggle("Texterkennung neu ausführen", value=False,
                       help="Aus: gespeicherte Ergebnisse verwenden (schnell, offline).")
     run = st.button("▶ Fall verarbeiten", type="primary", use_container_width=True, disabled=not case_id)

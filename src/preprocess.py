@@ -136,13 +136,22 @@ def sharpen(gray: np.ndarray, amount: float = 0.6, sigma: float = 1.5) -> np.nda
     return cv2.addWeighted(gray, 1 + amount, blurred, -amount, 0)
 
 
+def adaptive_threshold(gray: np.ndarray) -> np.ndarray:
+    """Black text on white, threshold chosen per neighbourhood (dirty or unevenly lit pages).
+
+    Can erase faint handwriting, so it is only ever one candidate in best-of, never the only path.
+    """
+    return cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 11)
+
+
 def variants(clean: np.ndarray) -> dict[str, np.ndarray]:
     """Extra versions of an already cleaned page, for best-of OCR (extract.read_best).
 
     No single cleanup suits every page, so OCR reads each version and keeps the best.
     Only pixel values change, never the geometry, so text positions still match the page.
     """
-    return {"clean": clean, "sharpened": sharpen(clean), "contrast": enhance_contrast(clean)}
+    return {"clean": clean, "sharpened": sharpen(clean), "contrast": enhance_contrast(clean),
+            "adaptive": adaptive_threshold(clean)}
 
 
 def upscale(gray: np.ndarray, factor: float = 2.0) -> np.ndarray:

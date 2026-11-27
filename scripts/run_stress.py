@@ -66,7 +66,11 @@ def main():
     ap.add_argument("--engine", default=config.OCR_ENGINE)
     ap.add_argument("--types", nargs="*")
     ap.add_argument("--quick", action="store_true", help="levels 2 and 4 only")
+    ap.add_argument("--best-of", action=argparse.BooleanOptionalAction, default=None,
+                    help="default: OCR_BEST_OF in .env (on). --no-best-of is about 4x faster")
     args = ap.parse_args()
+    if args.best_of is not None:
+        config.OCR_BEST_OF = args.best_of
 
     case_dir = config.DATA_DIR / "cases" / args.case
     stress = case_dir / "stress"

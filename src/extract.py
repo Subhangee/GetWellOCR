@@ -178,8 +178,8 @@ COVERAGE_WEIGHT = 0.2     # how much text it found, relative to the best variant
 
 
 def read_best(variants: dict[str, np.ndarray], engine: str | None = None, post=None
-              ) -> tuple[str, list[OCRLine], dict[str, float]]:
-    """Read every variant. Returns (best name, its lines, score per variant).
+              ) -> tuple[str, dict[str, list[OCRLine]], dict[str, float]]:
+    """Read every variant. Returns (best name, lines per variant, score per variant).
 
     All variants must have the same size, so text positions stay valid.
     post: optional step applied to each reading before scoring (e.g. parse.merge_rows),
@@ -196,4 +196,4 @@ def read_best(variants: dict[str, np.ndarray], engine: str | None = None, post=N
         mean_conf = sum(confs) / len(confs) if confs else 0.0
         scores[name] = round(CONFIDENCE_WEIGHT * mean_conf + COVERAGE_WEIGHT * chars[name] / most, 3)
     best = max(scores, key=scores.get)
-    return best, readings[best], scores
+    return best, readings, scores

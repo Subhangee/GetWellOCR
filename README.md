@@ -136,12 +136,14 @@ streamlit run app.py                   # opens http://localhost:8501
 - Optional: Azure Document Intelligence (EU region). Put endpoint and key in `.env` (**never commit it**)
 - The classifier model (`multilingual-e5-small`, ~120 MB) downloads once, then runs offline
 - Optional: **PaddleOCR (PP-OCRv6)**, a second offline engine. Install with `pip install -r requirements-paddle.txt`, then download the models once (~135 MB) with `python scripts\download_paddle_models.py`. Choose it with `--engine paddle`, `OCR_ENGINE=paddle` in `.env`, or in the app sidebar
-- Optional: **best-of OCR** (`--best-of`, or `OCR_BEST_OF=1` in `.env`) reads every page in three cleanup variants (as cleaned, sharpened, extra contrast) and keeps the reading with the best mix of confidence and amount of text. About 3x slower
+- **Best-of OCR** (on by default) reads every page in four cleanup variants (as cleaned, sharpened, extra contrast, adaptive threshold) and keeps the reading with the best mix of confidence and amount of text. Every variant's text is saved in `outputs/cases/<case>/ocr/variants/`. About 4x slower: switch off with `--no-best-of` or `OCR_BEST_OF=0` in `.env`
+- Compare engines on the test cases: `python scripts\compare_engines.py`
 
 ```powershell
 python scripts\process_case.py --classifier rules|model|hybrid
 python scripts\process_case.py --engine azure
-python scripts\process_case.py --engine paddle --best-of
+python scripts\process_case.py --engine paddle --no-best-of
+python scripts\compare_engines.py
 python scripts\process_case.py --pages data\cases\case01_hard\pages_photo
 python scripts\make_stress_set.py ; python scripts\run_stress.py --quick
 ```

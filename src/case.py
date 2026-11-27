@@ -45,8 +45,15 @@ def read_page(path: Path, page: int, engine: str, cache_dir: Path, fresh=False) 
     clean, steps = preprocess(img)
     variant_scores = None
     if best_of:
-        best, lines, variant_scores = read_best(variants(clean), engine, post=merge_rows)
+        best, readings, variant_scores = read_best(variants(clean), engine, post=merge_rows)
         steps.append(f"best of {len(variant_scores)}: {best}")
+        lines = readings[best]
+        # Keep every reading as plain text, to compare variants side by side
+        txt_dir = cache_dir / "variants"
+        txt_dir.mkdir(exist_ok=True)
+        for name, variant_lines in readings.items():
+            (txt_dir / f"{path.stem}_{engine}_{name}.txt").write_text(
+                "\n".join(l.text for l in variant_lines), encoding="utf-8")
     else:
         lines = merge_rows(read_text(clean, engine))
     confs = [l.confidence for l in lines if l.confidence is not None]
